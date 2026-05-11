@@ -1,0 +1,126 @@
+/** @file tutorial_basis.cpp
+
+    @brief Tutorial on constructing and visualizing B-spline bases in 1D.
+
+    Author(s): Massimiliano Ghiotto
+*/
+
+#include <iostream>
+#include <gismo.h>
+
+using namespace gismo;
+
+int main(int argc, char* argv[])
+{
+    std::string output("");
+    gsCmdLine cmd("G+Smo Tutorial: Playing with basis functions in 1D.");
+    cmd.addString("o", "output", "Name of the output file prefix.", output);
+
+    try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
+
+    gsInfo << "G+Smo Tutorial: Playing with basis functions in 1D.\n";
+
+    // ======================================================================
+    // 1. Bases with 6 elements and different degrees
+    // ======================================================================
+
+    for (int p = 0; p <= 3; ++p)
+    {
+        gsInfo << "\n--- Degree " << p << " ---\n";
+
+        // Create a clamped knot vector with 5 interior knots (resulting in 6 elements)
+        // range [0, 1], 5 interior knots, multiplicity at endpoints is p+1
+        gsKnotVector<> KV(0.0, 1.0, 5, p + 1);
+
+        // Create the B-spline basis
+        gsBSplineBasis<> basis(KV);
+
+        gsInfo << "Basis: " << basis << "\n";
+        gsInfo << "Number of elements: " << basis.numElements() << "\n";
+        gsInfo << "Number of basis functions: " << basis.size() << "\n";
+
+        // Write to ParaView
+        if (output != "")
+        {
+            std::string filename = output + "_basis_p" + util::to_string(p);
+            gsInfo << "Writing to ParaView file: " << filename << ".pvd\n";
+            gsWriteParaview(basis, filename, 1000);
+        }
+    }
+
+    // ======================================================================
+    // 2. Effect of knot multiplicity
+    // ======================================================================
+
+    gsInfo << "\n--- Effect of Multiplicity (Degree 2) ---\n";
+
+    // Degree 2, 6 elements
+    gsKnotVector<> KV_mult(0.0, 1.0, 5, 2 + 1);
+
+    // Let's look at the unique knots
+    gsInfo << "Unique knots: ";
+    for (auto k : KV_mult.unique()) gsInfo << k << " ";
+    gsInfo << "\n";
+
+    // We make the middle knot (0.5) have multiplicity 2.
+    // In G+Smo, we can insert a knot value to increase its multiplicity.
+    KV_mult.insert(0.5, 1); // Insert 0.5 once more (it was already there once)
+
+    gsBSplineBasis<> basis_mult(KV_mult);
+    gsInfo << "Basis with multiplicity 2 at 0.5: \n" << basis_mult << "\n";
+    gsInfo << "Functions are C^0 continuous at 0.5 instead of C^1.\n";
+
+    if (output != "")
+    {
+        std::string filename = output + "_basis_p2_mult2";
+        gsInfo << "Writing to ParaView file: " << filename << ".pvd\n";
+        gsWriteParaview(basis_mult, filename, 1000);
+    }
+
+
+    // ======================================================================
+    // 3. Constructing a function
+    // ======================================================================
+
+    gsInfo << "\n--- Constructing a Function (Degree 3) ---\n";
+
+    // Use degree 3 basis from before
+    gsKnotVector<> KV_f(0.0, 1.0, 5, 3 + 1); // To construct functions
+    gsBSplineBasis<> basis_f(KV_f);
+
+    // Create a vector of coefficients
+    // For a 1D scalar function, we need a matrix of size (basis.size() x 1)
+    gsMatrix<> coefs(basis_f.size(), 1);
+
+    // Create the coefficient
+    for (index_t i = 0; i < basis_f.size(); ++i)
+    {
+        if (i == 4) coefs(i, 0) = 1.0;
+        else if (i == 3 || i == 5) coefs(i, 0) = 0.5;
+        else coefs(i, 0) = 0.1;
+    }
+
+    gsInfo << "Coefficients: \n" << coefs.transpose() << "\n";
+
+    // Create the B-spline function (curve with target dimension 1)
+    gsBSpline<> spline(basis_f, coefs);
+
+    if (output != "")
+    {
+        std::string filename = output + "_my_function";
+        gsInfo << "Writing function to ParaView file: " << filename << ".pvd\n";
+        gsWriteParaview(spline, filename, 1000);
+    }
+
+    if (output == "")
+    {
+        gsInfo << "\nDone. No output created, re-run with --output <filename> to get ParaView "
+                  "files containing the solution.\n";
+    }
+    else
+    {
+        gsInfo << "\nDone. Open the " << output << "*.pvd files in ParaView to see the results!\n";
+    }
+
+    return 0;
+}

@@ -35,6 +35,7 @@ int main(int argc, char* argv[])
     std::string output("");
 
     gsCmdLine cmd("Tutorial on gsBasis class.");
+    // Parsing
     cmd.addPlainString("input", "G+Smo input basis file.", input);
     cmd.addString("o", "output", "Name of the output file.", output);
 
