@@ -58,13 +58,14 @@ int main(int argc, char* argv[])
     gsInfo << "\n--- Creating a 3D Curve ---\n";
 
     gsMatrix<> coefs3D(basis.size(), 3);
-    coefs3D << 0, 0, 0,
-               1, 0, 1,
-               1, 1, 2,
-               0, 1, 3,
-               -1, 1, 4,
-               -1, 0, 5,
-               0, 0, 6;
+    // Define a helix (spiral) shape in 3D
+    coefs3D << 1, 0, 0,
+               1, 1, 1,
+               0, 1, 2,
+               -1, 1, 3,
+               -1, -1, 4,
+               0, -1, 5,
+               1, -1, 6;
 
     gsBSpline<> curve3D(basis, coefs3D);
     gsInfo << "3D Curve: " << curve3D << "\n";
