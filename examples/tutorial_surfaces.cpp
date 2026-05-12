@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
     gsInfo << "\n--- 3. 3D NURBS Surface (Circular Cylinder Arc) ---\n";
     gsInfo << "NURBS can represent conic sections (like circles) exactly using weights.\n";
 
-    // Knot vector for circular direction (u): degree 2, multiplicity 3 at ends
+    // Knot vector for circular direction (u): degree 2 -> multiplicity 3 at ends
     // To represent a 90-degree arc exactly:
     gsKnotVector<> kv_arc(0, 1, 0, 3); // degree 2, 1 element
     // Knot vector for height direction (v): degree 1
@@ -119,6 +119,48 @@ int main(int argc, char* argv[])
     if (output != "")
     {
         gsWriteParaview(nurbsSurface, output + "_nurbs3D", 1000);
+    }
+
+    // ======================================================================
+    // 4. Scalar Function on 3D NURBS Surface (Colormap)
+    // ======================================================================
+    gsInfo << "\n--- 4. Scalar Function on 3D NURBS Surface ---\n";
+    gsInfo << "We can define a real-valued function on the surface and visualize it as a colormap.\n";
+
+    // We reuse the basis and geometry from the NURBS example
+    // A gsField connects a MultiPatch (geometry) with a MultiBasis and coefficients.
+    
+    // 1. Create a MultiPatch with our NURBS surface
+    gsMultiPatch<> mp;
+    mp.addPatch(nurbsSurface.clone());
+
+    // 2. The function lives in the same basis as the geometry
+    // For scalar functions, we need one coefficient per basis function.
+    gsMatrix<> funcCoefs(nurbsSurface.basis().size(), 1);
+    
+    // Let's define a "hotspot" in the middle of the surface
+    gsMatrix<> bAnchors = nurbsSurface.basis().anchors();
+    for (index_t i = 0; i < nurbsSurface.basis().size(); ++i)
+    {
+        real_t u = bAnchors(0, i);
+        real_t v = bAnchors(1, i);
+        // Distance from center (0.5, 0.5)
+        real_t dist = math::sqrt( (u-0.5)*(u-0.5) + (v-0.5)*(v-0.5) );
+        funcCoefs(i, 0) = math::exp(-10.0 * dist * dist); // Gaussian bump
+    }
+
+    // 3. Create the geometry for the scalar function
+    gsTensorNurbs<2> funcGeometry(nurbsSurface.basis(), funcCoefs);
+
+    // 4. Create the field linking the surface geometry and the scalar function
+    gsField<> field(nurbsSurface, funcGeometry);
+
+    if (output != "")
+    {
+        std::string fn = output + "_nurbsField";
+        gsInfo << "Writing NURBS surface with colormap to: " << fn << ".pvd\n";
+        // gsWriteParaview for a gsField creates a colored visualization
+        gsWriteParaview(field, fn, 1000);
     }
 
     if (output == "")
