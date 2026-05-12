@@ -45,6 +45,9 @@ int main(int argc, char* argv[])
     if (output != "")
     {
         gsWriteParaview(surface2D, output + "_surf2D_deformed", 100);
+        gsMesh<> cnet;
+        surface2D.controlNet(cnet);
+        gsWriteParaview(cnet, output + "_surf2D_deformed_cnet");
     }
 
     // ======================================================================
@@ -76,6 +79,9 @@ int main(int argc, char* argv[])
     if (output != "")
     {
         gsWriteParaview(surface3D, output + "_surf3D", 1000);
+        gsMesh<> cnet;
+        surface3D.controlNet(cnet);
+        gsWriteParaview(cnet, output + "_surf3D_cnet");
     }
 
     // ======================================================================
@@ -118,7 +124,7 @@ int main(int argc, char* argv[])
 
     if (output != "")
     {
-        gsWriteParaview(nurbsSurface, output + "_nurbs3D", 1000);
+        gsWriteParaview(nurbsSurface, output + "_nurbs3D", 1000, false, true);
     }
 
     // ======================================================================

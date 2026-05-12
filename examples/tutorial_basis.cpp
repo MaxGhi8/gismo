@@ -61,6 +61,11 @@ void writeSplineVTP(const gsBSpline<>& spline, const std::string& filename)
     }
     
     gsWriteParaview(mesh, filename);
+
+    // Also export the control net
+    gsMesh<> cnet;
+    spline.controlNet(cnet);
+    gsWriteParaview(cnet, filename + "_cnet");
 }
 
 int main(int argc, char* argv[])

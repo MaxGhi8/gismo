@@ -50,6 +50,11 @@ int main(int argc, char* argv[])
         gsInfo << "Writing 2D curve to: " << fn << ".vtp\n";
         // Note: For 1D objects like curves, G+Smo produces .vtp (PolyData)
         gsWriteParaview(curve2D, fn, 1000);
+        
+        // Export the control net
+        gsMesh<> cnet;
+        curve2D.controlNet(cnet);
+        gsWriteParaview(cnet, fn + "_cnet");
     }
 
     // ======================================================================
@@ -75,6 +80,11 @@ int main(int argc, char* argv[])
         std::string fn = output + "_curve3D";
         gsInfo << "Writing 3D curve to: " << fn << ".vtp\n";
         gsWriteParaview(curve3D, fn, 1000);
+        
+        // Export the control net
+        gsMesh<> cnet;
+        curve3D.controlNet(cnet);
+        gsWriteParaview(cnet, fn + "_cnet");
     }
 
     if (output == "")
