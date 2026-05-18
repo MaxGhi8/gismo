@@ -33,6 +33,7 @@ int main(int argc, char *argv[])
     index_t interiorPts = 5;
     index_t wEdge = 10;
     index_t wInterior = 1;
+    index_t closeBoundary = 1;
 
     gsCmdLine cmd("Recover the features of a triangulated surface.");
     cmd.addPlainString("filename", "File containing the input mesh", filename);
@@ -53,6 +54,10 @@ int main(int argc, char *argv[])
     cmd.addReal("y", "innerangle","Cutoff angle (degrees) for second pass.",
                 innerAngle);
     cmd.addReal("c", "cutoff","Cutoff angle (degrees).", cutoffAngle);
+    cmd.addInt("b", "closeboundary",
+               "Extra fitting samples per shared edge between adjacent patches "
+               "(higher reduces gaps between neighbouring NURBS patches).",
+               closeBoundary);
 
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
 
@@ -76,6 +81,7 @@ int main(int argc, char *argv[])
     gsInfo << "Cutoff angle is " << cutoffAngle << "\n";
     gsInfo << "Master surfaces have degree " << degree << " and " << interiorPts << " interior knot points.\n";
     gsInfo << "Surface fit: edge weighting is " << wEdge << " and interior point weighting is " << wInterior << ".\n";
+    gsInfo << "closeBoundary (extra samples along shared seams) = " << closeBoundary << ".\n";
     if(noSmooth) gsInfo << "Will NOT smooth corners of faces\n";
     else gsInfo << "WILL smooth corners of faces\n";
     if(plot) gsInfo << "WILL create paraview plot\n";
@@ -135,7 +141,7 @@ int main(int argc, char *argv[])
 
     gsSolid<> sl;
     //if you need a higher number of interior points when fitting the surface increase the 8th input variable(now 5)
-    tmts.toSolid(sl,iPoints,oPoints,innerBdrys,innerBdrysMassP,oPointsConvexFlag,paraMeshes,fitMeshes,patchMeshes,degree,interiorPts,true,300,true,wEdge,wInterior,1,noSmooth);
+    tmts.toSolid(sl,iPoints,oPoints,innerBdrys,innerBdrysMassP,oPointsConvexFlag,paraMeshes,fitMeshes,patchMeshes,degree,interiorPts,true,300,true,wEdge,wInterior,closeBoundary,noSmooth);
     gsInfo<<sl<<'\n';
 
     if (toxml)
@@ -190,7 +196,7 @@ int main(int argc, char *argv[])
         // Write a paraview file
         gsInfo<<"Writing paraview file..." << "\n";
 
-        gsWriteParaview( *m, "output");
+        gsWriteParaview( *m, baseName + "_mesh");
     }
     else
     {
