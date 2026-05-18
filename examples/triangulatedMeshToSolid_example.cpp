@@ -197,6 +197,7 @@ int main(int argc, char *argv[])
         gsInfo<<"Writing paraview file..." << "\n";
 
         gsWriteParaview( *m, baseName + "_mesh");
+        gsWriteParaviewSolid(sl, baseName, 100);
     }
     else
     {
