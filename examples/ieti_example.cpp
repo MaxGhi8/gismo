@@ -433,6 +433,7 @@ int main(int argc, char *argv[])
             mpsol.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal[k])  ) );
         gsWriteParaview<>( gsField<>( mp, mpsol ), "ieti_result", 1000);
         //gsFileManager::open("ieti_result.pvd");
+        gsWriteParaview(mp, "ieti_domain", 1000);
     }
 
     if (!plot&&out.empty())
