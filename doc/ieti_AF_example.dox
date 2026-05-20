@@ -1,0 +1,447 @@
+namespace gismo {
+/**
+
+\page ieti_AF_example ieti_AF_example.cpp
+
+This example extends \ref ieti_example by implementing the
+**IETI-AF** (**All-Floating** IETI, also known as *Total FETI*) variant
+alongside the standard **IETI-DP** solver. Both methods solve the same
+Poisson problem on the same multi-patch isogeometric discretization; the
+two solutions are then compared to verify that they are numerically
+equivalent.
+
+\tableofcontents
+
+---
+
+\section ieti_AF_problem Problem statement
+
+We solve the Poisson boundary value problem
+\f{align*}{
+    -\Delta u &= f    &&\text{in } \Omega, \\
+            u &= g_D  &&\text{on } \Gamma_D, \\
+  \partial_n u &= g_N  &&\text{on } \Gamma_N,
+\f}
+on a non-overlapping multi-patch domain
+\f[
+   \overline\Omega = \bigcup_{k=1}^K \overline{\Omega_k},
+   \quad \Omega_k \cap \Omega_l = \emptyset \text{ for } k\neq l.
+\f]
+On each patch we have an isogeometric function space \f$V_k\f$.
+We assume *fully matching* interfaces, so the global space
+\f$V_h = \{v : v|_{\Omega_k}\in V_k\}\f$ is conforming.
+
+Patch-wise assembly gives local stiffness matrices \f$A_k\f$ and load
+vectors \f$\underline f_k\f$ for \f$k=1,\ldots,K\f$.
+
+---
+
+\section ieti_AF_dp_vs_af IETI-DP vs. IETI-AF
+
+Both methods solve the *same* saddle-point problem using Lagrange
+multipliers that enforce the continuity constraints between patches.
+They differ in how the Dirichlet boundary conditions are treated.
+
+| Feature | IETI-DP | IETI-AF |
+|---|---|---|
+| Dirichlet BCs | Eliminated from local matrices | Enforced by extra Lagrange multipliers |
+| Dirichlet dofs | Removed before assembly | Kept as free dofs; constrained by additional \f$\lambda\f$ |
+| Every patch | May be *pinned* by Dirichlet BCs | All patches are *floating* subdomains |
+| Local null space | Eliminated by Dirichlet BCs | Constants kernel present on every patch |
+| Jump matrix \f$B_k\f$ | Interface rows only | Interface rows **plus** Dirichlet constraint rows |
+| Coarse problem | Directly SPD | Singular until Dirichlet applied at coarse level |
+
+The name *All-Floating* refers to the fact that the Dirichlet boundary
+conditions no longer eliminate degrees of freedom from individual
+patches; every patch is a *floating* subdomain whose local stiffness
+matrix \f$A_k\f$ is singular (its null space contains the constant
+function). The constants are ultimately killed through the combination
+of primal corner constraints and Dirichlet Lagrange multipliers.
+
+---
+
+\section ieti_AF_math Mathematical formulation
+
+\subsection ieti_AF_interface Interface jump constraints
+
+Let \f$B_k^{\text{int}}\f$ be the interface jump matrix for patch
+\f$k\f$ (assembled by `gsIetiMapper::computeJumpMatrices()`). In both
+IETI-DP and IETI-AF we impose
+\f[
+   \sum_{k=1}^K B_k^{\text{int}} \underline u_k = 0
+   \quad \text{(continuity at interfaces)}.
+\f]
+
+\subsection ieti_AF_dirichlet Dirichlet Lagrange multipliers
+
+In IETI-AF we **do not** eliminate the Dirichlet dofs. Instead, for
+every unique global Dirichlet dof \f$i\f$ (identified via a reference
+`gsDofMapper` with Dirichlet elimination), we add **one** extra
+Lagrange multiplier enforcing
+\f[
+   u_{k(i),i} = g_D(x_i),
+\f]
+where \f$k(i)\f$ is the first patch that carries dof \f$i\f$. Because
+shared boundary dofs are already linked across patches by the interface
+Lagrange multipliers, creating a separate Lagrange multiplier per patch
+for the same physical point would make the system rank-deficient.
+
+Collecting all Dirichlet rows into a matrix
+\f$B^{\text{dir}}_k \in \mathbb{R}^{n_D \times n_k}\f$
+(with one +1 per row), the **augmented jump matrix** for patch \f$k\f$
+is
+\f[
+   B_k^{\text{aug}}
+   =
+   \begin{pmatrix}
+       B_k^{\text{int}} \\[3pt]
+       B_k^{\text{dir}}
+   \end{pmatrix}
+   \in \mathbb{R}^{(n_\lambda^{\text{int}}+n_D)\times n_k}.
+\f]
+The augmented constraint reads
+\f[
+   \sum_{k=1}^K B_k^{\text{aug}} \underline u_k
+   =
+   \begin{pmatrix} 0 \\ \underline d \end{pmatrix},
+\f]
+where \f$\underline d \in \mathbb{R}^{n_D}\f$ collects the Dirichlet
+values \f$g_D(x_i)\f$.
+
+\subsection ieti_AF_saddlepoint IETI saddle-point system
+
+Using the augmented jump matrices and local saddle-point blocks
+(introduced by the primal system; see \ref ieti_example for details),
+the IETI-AF saddle-point system is
+\f[
+    \begin{pmatrix}
+       \tilde A_1 &            &             &                &  (\tilde B_1^{\text{aug}})^\top \\
+                  & \tilde A_2 &             &                &  (\tilde B_2^{\text{aug}})^\top \\
+                  &            &   \ddots    &                &  \vdots              \\
+                  &            &             & \tilde A_{K+1} &  (\tilde B_{K+1}^{\text{aug}})^\top \\
+       \tilde B_1^{\text{aug}} & \tilde B_2^{\text{aug}} &   \cdots    & \tilde B_{K+1}^{\text{aug}} &     0 \\
+    \end{pmatrix}
+    \begin{pmatrix}
+        \underline{\tilde u}_1 \\
+        \vdots \\
+        \underline{\tilde u}_{K+1} \\
+        \underline\lambda
+    \end{pmatrix}
+    =
+    \begin{pmatrix}
+        \underline{\tilde f}_1 \\
+        \vdots \\
+        \underline{\tilde f}_{K+1} \\
+        \begin{pmatrix} 0 \\ \underline d \end{pmatrix}
+    \end{pmatrix}.
+\f]
+The Schur complement form is
+\f[
+    F^{\text{aug}} \underline\lambda
+    = \underline g^{\text{aug}} - \begin{pmatrix} 0 \\ \underline d \end{pmatrix},
+\f]
+where
+\f[
+    F^{\text{aug}} = \sum_{k=1}^{K+1} \tilde B_k^{\text{aug}}
+                     \tilde A_k^{-1} (\tilde B_k^{\text{aug}})^\top,
+    \qquad
+    \underline g^{\text{aug}} = \sum_{k=1}^{K+1} \tilde B_k^{\text{aug}}
+                     \tilde A_k^{-1} \underline{\tilde f}_k.
+\f]
+
+\subsection ieti_AF_coarse Singularity of the primal coarse matrix
+
+In IETI-DP, the primal coarse matrix
+\f$P = \tilde A_{K+1} = \sum_k \Psi_k^\top A_k \Psi_k\f$
+is a discrete energy inner product on the corner dofs and is regular
+(symmetric positive definite) because every corner dof that is not
+shared is pinned by Dirichlet elimination.
+
+In IETI-AF, Dirichlet elimination is **not** applied to the local
+matrices before `gsPrimalSystem::handleConstraints()`. Consequently
+\f$P\f$ inherits the kernel of the original local problems: if none of
+the corner primals lies on the Dirichlet boundary (which happens, for
+example, in the 2-patch unit square), \f$P\f$ is a pure Laplacian on
+corner values and admits the global constant as a null vector.
+
+The fix is to apply a **coarse-level Dirichlet elimination**: for every
+primal dof \f$i_d\f$ that corresponds to a Dirichlet corner, we set
+\f[
+   P_{i_d,:} = P_{:,i_d} = \delta_{i_d}, \quad
+   (\underline f_P)_{i_d} = g_D(x_{i_d}),
+\f]
+and adjust the constraint RHS by
+\f[
+   \Delta \underline g = B_P^{\text{aug}} \underline d_P,
+\f]
+where \f$\underline d_P\f$ holds the Dirichlet values for the pinned
+primal dofs and \f$B_P^{\text{aug}}\f$ is the (now zero-column-cleared)
+primal jump matrix. The complete corrected Schur RHS is therefore
+\f[
+    \text{rhs}^{\text{Schur}}
+    = \underline g^{\text{aug}}
+    - \begin{pmatrix} 0 \\ \underline d \end{pmatrix}
+    + \Delta \underline g.
+\f]
+
+\subsection ieti_AF_prec Preconditioner
+
+The interface block of \f$F^{\text{aug}}\f$ is preconditioned with the
+standard scaled Dirichlet preconditioner
+\f[
+    M_{sD} = \sum_{k=1}^K \hat B_k^{\text{int}} D_k^{-1} S_k D_k^{-1}
+             (\hat B_k^{\text{int}})^\top,
+\f]
+where \f$S_k\f$ is the Schur complement of the *original* (not
+augmented) \f$A_k\f$ with respect to the interface dofs and
+\f$D_k\f$ is the multiplicity scaling matrix.
+
+The Dirichlet block (bottom-right of \f$F^{\text{aug}}\f$) is
+preconditioned by an **identity operator**, giving the full
+block-diagonal preconditioner
+\f[
+    M^{\text{AF}} = \begin{pmatrix} M_{sD} & 0 \\ 0 & I_{n_D} \end{pmatrix}.
+\f]
+
+---
+
+\section ieti_AF_impl Implementation walk-through
+
+The implementation is split between the helper functions `solveIetiAF()`
+and `solveIetiDP()` and the `main()` function.
+
+\subsection ieti_AF_impl_ref Reference mapper (step A)
+
+We first build a `gsDofMapper` **with** Dirichlet elimination to
+identify which patch-local dof indices correspond to Dirichlet
+nodes and to retrieve their interpolated values:
+
+```cpp
+gsExprAssembler<> assembler;
+space u = assembler.getSpace(mb);
+gsBoundaryConditions<> bcCopy = bc;
+bcCopy.setGeoMap(mp);
+u.setup(bcCopy, dirichlet::interpolation, 0);
+mapperDir    = u.mapper();
+fixedPartDir = u.fixedPart();
+```
+
+\subsection ieti_AF_impl_ieti IETI mapper without Dirichlet (step B)
+
+The `gsIetiMapper` is initialised with an **empty** boundary-condition
+object so that every basis function remains a free dof:
+
+```cpp
+gsExprAssembler<> assembler;
+space u = assembler.getSpace(mb);
+gsBoundaryConditions<> bcEmpty;
+u.setup(bcEmpty, dirichlet::interpolation, 0);
+ietiMapper.init(mb, u.mapper(), u.fixedPart());
+```
+
+\subsection ieti_AF_impl_corners Corner primals (step B, continued)
+
+Because every patch is floating, every patch must have at least one
+primal constraint to kill its local constant null space. We therefore
+register **all** corners as primals — including corners that sit on the
+Dirichlet boundary (which `gsIetiMapper::cornersAsPrimals()` would
+skip). We use `customPrimalConstraints()` and group corners that share
+the same global dof into one primal constraint:
+
+```cpp
+for (boxCorner it = ...; it != ...; ++it) {
+    const index_t globalIdx = ietiMapper.dofMapperGlobal().index(idx, k);
+    // store (patch_index, unit-vector constraint) in groups[globalIdx]
+    // and remember whether this corner is Dirichlet
+}
+for (auto& kv : groups) {
+    const index_t primalIdx = ietiMapper.nPrimalDofs();
+    ietiMapper.customPrimalConstraints(kv.second.first);
+    if (kv.second.second.first)   // Dirichlet corner
+        dirichletPrimals.push_back({primalIdx, kv.second.second.second});
+}
+```
+
+\subsection ieti_AF_impl_dirlm Dirichlet Lagrange multipliers (step C)
+
+We iterate over every unique global Dirichlet dof (across all patches)
+and create exactly one extra Lagrange multiplier for each, recording
+its local dof index in the IETI-AF mapper:
+
+```cpp
+std::set<index_t> seenGlobalDir;
+for (index_t k = 0; k < nPatches; ++k)
+    for (index_t i = 0; i < mapperDir.patchSize(k); ++i) {
+        const index_t globalDir = mapperDir.index(i, k);
+        if (!mapperDir.is_boundary_index(globalDir)) continue;
+        if (!seenGlobalDir.insert(globalDir).second) continue;  // deduplicate
+        // record (extraLM_index, local_dof_index) for patch k
+        dirichletRows[k].push_back({extraLM, localIdx});
+        dirichletValsVec.push_back(val);
+        ++extraLM;
+    }
+```
+
+\subsection ieti_AF_impl_assembly Per-patch assembly (step D)
+
+Local stiffness is assembled **without** Dirichlet elimination.
+Only Neumann conditions are passed to the local assembler; Dirichlet
+values are handled entirely through the Lagrange multipliers.
+
+After assembly, the augmented jump matrix is formed by stacking the
+interface rows (from `ietiMapper.jumpMatrix(k)`) above the Dirichlet
+rows:
+
+```cpp
+gsSparseEntries<> entries;
+// copy interface rows
+for (...) entries.add(row, col, val);
+// append Dirichlet rows
+for (auto& pr : dirichletRows[k])
+    entries.add(nInterfaceLM + pr.first, pr.second, 1.0);
+gsSparseMatrix<real_t, RowMajor> jumpAug(nTotalLM, nLocal);
+jumpAug.setFrom(entries);
+```
+
+The scaled Dirichlet preconditioner is fed **only** the interface jump
+matrix (it works on the interface skeleton dofs and is unaware of the
+Dirichlet LM block).
+
+\subsection ieti_AF_impl_coarseDir Coarse-level Dirichlet elimination (step E)
+
+After `primal.handleConstraints()` is called for all patches, the
+primal local matrix \f$P\f$ may be singular. We pin every primal dof
+that corresponds to a Dirichlet corner:
+
+```cpp
+// 1. subtract column-sweep contribution from rhsP
+for (index_t j = 0; j < P.outerSize(); ++j) {
+    if (!isDir[j]) continue;
+    for (InnerIterator it(P, j); it; ++it)
+        if (!isDir[it.row()])
+            rhsP(it.row(), 0) -= it.value() * dirVal(j, 0);
+}
+// 2. replace Dirichlet rows/cols by identity
+// 3. set Dirichlet rhs
+for (auto& pr : dirichletPrimals)
+    rhsP(pr.first, 0) = pr.second;
+// 4. accumulate correction to global Schur RHS
+coarseSchurAdj += Bp * dirVal;
+// 5. zero Dirichlet columns of Bp
+```
+
+\subsection ieti_AF_impl_schurrhs Corrected Schur RHS (step F)
+
+The Schur RHS assembled by `gsIetiSystem::rhsForSchurComplement()`
+is \f$\underline g^{\text{aug}}\f$. We subtract the Dirichlet value
+vector and add the coarse correction:
+
+```cpp
+gsMatrix<> rhsForSchur = ieti.rhsForSchurComplement();
+rhsForSchur.bottomRows(nDirichletLM) -= dirichletVals;
+rhsForSchur                          += coarseSchurAdj;
+```
+
+\subsection ieti_AF_impl_solve PCG solve (step G)
+
+The block-diagonal preconditioner is assembled and CG is run on the
+corrected Schur system. The solution is reconstructed per patch
+exactly as in IETI-DP:
+
+```cpp
+gsBlockOp<>::Ptr bp = gsBlockOp<>::make(2, 2);
+bp->addOperator(0, 0, sdPrec);                       // scaled Dirichlet
+bp->addOperator(1, 1, gsIdentityOp<>::make(nDirLM)); // identity for Dir LMs
+gsConjugateGradient<> PCG(ieti.schurComplement(), bp);
+PCG.setOptions(solverOpts).solveDetailed(rhsForSchur, lambda, errorHistory);
+```
+
+---
+
+\section ieti_AF_usage Usage
+
+```
+ieti_AF_example [options]
+
+  -g  <file>   Geometry file (default: domain2d/yeti_mp2.xml)
+      --SplitPatches <n>  Uniformly split every patch n times (default: 1)
+      --StretchGeometry <s>  Stretch in x-direction (default: 1)
+  -r  <n>      Number of uniform h-refinements (default: 1)
+  -p  <d>      Spline degree (default: 2)
+  -b  <str>    Boundary conditions per boundary: 'd'=Dirichlet, 'n'=Neumann
+               A single character applies to all boundaries (default: "d")
+  -c  <str>    Primal constraints: 'c'=corners, 'e'=edge averages,
+               'f'=face averages (default: "c")
+  -e           Eliminate pointwise primal constraints (corners) from local sys.
+  -t  <tol>    CG stopping tolerance (default: 1e-8)
+      --Solver.MaxIterations <n>  (default: 100)
+      --plot   Write ParaView output files
+```
+
+\subsection ieti_AF_usage_example Example runs
+
+```bash
+# Default: yeti geometry, degree 2, 1 refinement, corners as primals
+./build/bin/ieti_AF_example
+
+# Higher resolution with edge primals
+./build/bin/ieti_AF_example -r 3 -p 3 -c ce
+
+# Pure Neumann problem (all patches floating, no Dirichlet at all)
+./build/bin/ieti_AF_example -b n
+
+# Paraview output
+./build/bin/ieti_AF_example --plot
+```
+
+\subsection ieti_AF_usage_output Expected output
+
+```
+*** Running IETI-DP ***
+IETI-DP: 13 iterations, final residual 2.90777e-09
+
+*** Running IETI-AF (Total FETI) ***
+IETI-AF: 35 iterations, final residual 5.22744e-09
+
+*** Comparison ***
+max |coef_DP - coef_AF| over all patches : ...
+relative max-coefficient difference      : ...
+||u_DP - u_AF||_L2  : ...
+relative L2 diff    : 6.40242e-10
+
+OK: IETI-AF matches IETI-DP within 1e-06
+```
+
+IETI-AF typically needs more CG iterations than IETI-DP because the
+Dirichlet LM block uses only an identity preconditioner, but the
+two methods converge to the same discrete solution.
+
+---
+
+\section ieti_AF_refs References
+
+- C. Farhat, F.-X. Roux: *A method of finite element tearing and
+  interconnecting and its parallel solution algorithm*, IJNME 32
+  (1991), 1205–1227.
+- C. Farhat, M. Lesoinne, P. LeTallec, K. Pierson, D. Rixen:
+  *FETI-DP: A dual–primal unified FETI method*, IJNME 50 (2001),
+  1523–1544.
+- S. Takacs, T. Takacs: *Approximation error estimates and inverse
+  inequalities for B-splines of maximum smoothness*, M2AN 50 (2016).
+- U. Langer, S. Takacs: *Isogeometric methods for elliptic problems
+  on multi-patch domains*, Comput. Meth. Appl. Mech. Engrg. 316
+  (2017).
+- C. Hofer, U. Langer, M. Neumüller, R. Schneckenleitner:
+  *Parallel and robust preconditioning for space-time isogeometric
+  analysis of parabolic evolution problems*, SIAM J. Sci. Comput.
+  41 (2019).
+
+---
+
+\section ieti_AF_annotated Annotated source file
+
+\include ieti_AF_example.cpp
+
+*/
+
+}
