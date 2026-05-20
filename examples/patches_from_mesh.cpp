@@ -18,6 +18,7 @@ using namespace gismo;
 int main(int argc, char *argv[])
 {
     std::string filename("off/neon_side.off");
+    // std::string filename("off/mushroom_triangulated.off");
     std::string out;
     bool plot = false;
 
