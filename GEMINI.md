@@ -90,6 +90,27 @@ Unit tests are located in the `unittests/` directory.
 - `plugins/`: Plugins for external software (e.g., Axel, Rhinoceros).
 - `external/`: Third-party dependencies (e.g., Eigen).
 
+## IETI and Geometry Workflows
+
+### Working with Geometries
+- **Location:** Common geometries are stored in `filedata/domain2d/` and `filedata/volumes/`.
+- **Visualization:** Use `geometry_example` to convert XML to ParaView format:
+  ```bash
+  ./build/bin/geometry_example -i filedata/domain2d/yeti_mp2.xml -o my_geometry
+  ```
+- **Splitting Patches:** Use the `--SplitPatches N` flag in many examples to turn a single-patch geometry into a multi-patch domain suitable for IETI.
+
+### Running IETI Examples
+- **Schur Complement (CG):** `ieti_example`
+  ```bash
+  ./build/bin/ieti_example -g domain2d/yeti_mp2.xml --plot
+  ```
+- **Saddle Point (MINRES):** `ieti2_example`
+  ```bash
+  ./build/bin/ieti2_example -g domain2d/yeti_mp2.xml --plot
+  ```
+- **Visualizing Results:** In ParaView, use the "Surface With Edges" representation to see both the solution and the patch/knot-line discretization.
+
 ## Contact and Support
 
 - **Wiki:** [https://github.com/gismo/gismo/wiki](https://github.com/gismo/gismo/wiki)
