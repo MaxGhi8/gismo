@@ -189,6 +189,15 @@ int main(int argc, char *argv[])
             myfile.close();
         }
 
+        gsMultiPatch<> mp;
+        for (size_t i = 0; i < sl.face.size(); ++i)
+            mp.addPatch( sl.face[i]->surf->getTP()->clone() );
+        mp.computeTopology();      // detect patch-to-patch interfaces
+
+        gsFileData<> mpData;
+        mpData << mp;
+        mpData.dump(baseName + "_mp");   // produces baseName_mp.xml with <MultiPatch>
+
     }
 
     if (plot)
@@ -197,7 +206,7 @@ int main(int argc, char *argv[])
         gsInfo<<"Writing paraview file..." << "\n";
 
         gsWriteParaview( *m, baseName + "_mesh");
-        gsWriteParaviewSolid(sl, baseName, 100);
+        gsWriteParaviewSolid(sl, baseName, 1000);
     }
     else
     {
