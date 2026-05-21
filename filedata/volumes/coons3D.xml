@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This file was created by G+Smo 0.8.1-->
+<xml>
+ <Geometry type="TensorBSpline3" id="0">
+  <Basis type="TensorBSplineBasis3">
+   <Basis type="BSplineBasis" index="0">
+    <KnotVector degree="4">0 0 0 0 0 1 1 1 1 1 </KnotVector>
+   </Basis>
+   <Basis type="BSplineBasis" index="1">
+    <KnotVector degree="4">0 0 0 0 0 1 1 1 1 1 </KnotVector>
+   </Basis>
+   <Basis type="BSplineBasis" index="2">
+    <KnotVector degree="1">0 0 1 1 </KnotVector>
+   </Basis>
+  </Basis>
+  <coefs geoDim="3">-50 -50 0 
+-17 -20 0 
+0 -10 0 
+16 -5 0 
+50 -50 0 
+-40 -15 0 
+-5.25 9.5 0 
+15 19 0 
+34.5 22.25 0 
+70 -17 0 
+-30 10 0 
+1.5 27.5 0 
+20 35 0 
+38 35 0 
+70 0 0 
+-30 30 0 
+-4.25 47.5 0 
+10 60 0 
+24 63.75 0 
+50 40 0 
+-50 50 0 
+-20 60 0 
+0 70 0 
+20 70 0 
+50 50 0 
+-50 -50 50 
+-17 -20 50 
+0 -10 50 
+16 -5 50 
+50 -50 50 
+-40 -15 50 
+-5.25 9.5 50 
+15 19 50 
+34.5 22.25 50 
+70 -17 50 
+-30 10 50 
+1.5 27.5 50 
+20 35 50 
+38 35 50 
+70 0 50 
+-30 30 50 
+-4.25 47.5 50 
+10 60 50 
+24 63.75 50 
+50 40 50 
+-50 50 50 
+-20 60 50 
+0 70 50 
+20 70 50 
+50 50 50 
+</coefs>
+ </Geometry>
+</xml>
+
