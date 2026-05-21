@@ -168,6 +168,13 @@ int main(int argc, char *argv[])
 
     gsInfo << "done.\n";
 
+    for ( size_t i = 0; i < mb.nBases(); ++ i )
+    {
+        gsInfo << "Patch " << i << ": Degree " << mb[i].degree(0);
+        for (short_t d = 1; d < mb[i].domainDim(); ++d) gsInfo << "x" << mb[i].degree(d);
+        gsInfo << ", " << mb[i].size() << " basis functions.\n";
+    }
+
     /********* Setup assembler and assemble matrix **********/
 
     gsInfo << "Setup assembler and assemble matrix... " << std::flush;
