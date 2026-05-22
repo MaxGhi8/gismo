@@ -27,6 +27,7 @@ int main(int argc, char *argv[])
     /************** Define command line options *************/
 
     std::string geometry("domain2d/yeti_mp2.xml");
+    std::string coeff("1.0");
     index_t splitPatches = 1;
     real_t stretchGeometry = 1;
     index_t refinements = 1;
@@ -42,6 +43,7 @@ int main(int argc, char *argv[])
 
     gsCmdLine cmd("Solves a PDE with an isogeometric discretization using an isogeometric tearing and interconnecting (IETI) solver.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);
+    cmd.addString("a", "Coeff",                 "Coefficient function a(x)", coeff);
     cmd.addInt   ("",  "SplitPatches",          "Split every patch that many times in 2^d patches", splitPatches);
     cmd.addReal  ("",  "StretchGeometry",       "Stretch geometry in x-direction by the given factor", stretchGeometry);
     cmd.addInt   ("r", "Refinements",           "Number of uniform h-refinement steps to perform before solving", refinements);
@@ -105,6 +107,9 @@ int main(int argc, char *argv[])
     gsInfo << "Define right-hand-side and boundary conditions... " << std::flush;
 
     //! [Define Source]
+    // Coefficient function
+    gsFunctionExpr<> a( coeff, mp.geoDim() );
+
     // Right-hand-side
     gsFunctionExpr<> f( "2*sin(x)*cos(y)", mp.geoDim() );
 
@@ -290,11 +295,14 @@ int main(int argc, char *argv[])
         // Set the source term
         auto ff = assembler.getCoeff(f, G);
 
+        // Set the coefficient
+        auto aa = assembler.getCoeff(a, G);
+
         // Initialize the system
         assembler.initSystem();
 
         // Compute the system matrix and right-hand side
-        assembler.assemble( igrad(u, G) * igrad(u, G).tr() * meas(G), u * ff * meas(G) );
+        assembler.assemble( aa * igrad(u, G) * igrad(u, G).tr() * meas(G), u * ff * meas(G) );
 
         // Add contributions from Neumann conditions to right-hand side
         variable g_N = assembler.getBdrFunction();
