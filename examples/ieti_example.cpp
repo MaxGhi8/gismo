@@ -392,6 +392,7 @@ int main(int argc, char *argv[])
     //! [Define initial guess]
     gsMatrix<> lambda;
     lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
+    // lambda.setZero( ieti.nLagrangeMultipliers(), 1 );
     //! [Define initial guess]
 
     gsMatrix<> errorHistory;
