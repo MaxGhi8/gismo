@@ -302,7 +302,7 @@ int main(int argc, char *argv[])
         assembler.initSystem();
 
         // Compute the system matrix and right-hand side
-        assembler.assemble( aa * igrad(u, G) * igrad(u, G).tr() * meas(G), u * ff * meas(G) );
+        assembler.assemble( aa.val() * igrad(u, G) * igrad(u, G).tr() * meas(G), u * ff * meas(G) );
 
         // Add contributions from Neumann conditions to right-hand side
         variable g_N = assembler.getBdrFunction();
