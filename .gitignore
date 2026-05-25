@@ -1,3 +1,6 @@
+# filedata
+filedata/onnx_models/
+
 # Submodule files
 submodules.txt
 .gitmodules
