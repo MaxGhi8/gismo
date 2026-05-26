@@ -646,23 +646,55 @@ int main(int argc, char *argv[])
     for (size_t i = 0; i < mb.nBases(); ++i) mb[i].setDegreePreservingMultiplicity(degree);
     for (index_t i = 0; i < refinements; ++i) mb.uniformRefine();
 
+    // Enforce square discretization: find the global maximum knot span count
+    // across all patches and all directions, then refine every patch in every
+    // direction until it matches, so all patches have the same number of BFs.
+    {
+        typedef gsTensorBSplineBasis<2,real_t> TBasis;
+        const short_t dim = mp.geoDim();
+
+        index_t globalMax = 0;
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
+        }
+
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                while ((index_t)tb.knots(d).numElements() < globalMax)
+                    mb[k].uniformRefine(1, 1, d);
+        }
+    }
+
     // ---------------- primals config ----------------
     PrimalsConfig primalsCfg;
     if (!parsePrimals(primals, primalsCfg)) return EXIT_FAILURE;
 
     gsOptionList solverOpts = cmd.getGroup("Solver");
 
+    gsStopwatch timer;
+
     gsInfo << "\n*** Running IETI-DP ***\n";
     index_t iterDP; real_t resDP;
+    timer.restart();
     std::vector< gsMatrix<> > coefDP =
         solveIetiDP(mp, mb, bc, f, primalsCfg, eliminateCorners, solverOpts, iterDP, resDP);
-    gsInfo << "IETI-DP: " << iterDP << " iterations, final residual " << resDP << "\n";
+    const double timeDP = timer.stop();
+    gsInfo << "IETI-DP: " << iterDP << " iterations, final residual " << resDP
+           << ", solve time: " << timeDP << " s\n";
 
     gsInfo << "\n*** Running IETI-AF (Total FETI) ***\n";
     index_t iterAF; real_t resAF;
+    timer.restart();
     std::vector< gsMatrix<> > coefAF =
         solveIetiAF(mp, mb, bc, f, primalsCfg, eliminateCorners, solverOpts, iterAF, resAF);
-    gsInfo << "IETI-AF: " << iterAF << " iterations, final residual " << resAF << "\n";
+    const double timeAF = timer.stop();
+    gsInfo << "IETI-AF: " << iterAF << " iterations, final residual " << resAF
+           << ", solve time: " << timeAF << " s\n";
 
     // ---------------- compare ----------------
     GISMO_ASSERT(coefDP.size() == coefAF.size(), "patch count mismatch");

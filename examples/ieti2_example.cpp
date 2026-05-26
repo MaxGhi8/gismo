@@ -149,6 +149,30 @@ int main(int argc, char *argv[])
     for ( index_t i = 0; i < refinements; ++i )
         mb.uniformRefine();
 
+    // Enforce square discretization: find the global maximum knot span count
+    // across all patches and all directions, then refine every patch in every
+    // direction until it matches, so all patches have the same number of BFs.
+    {
+        typedef gsTensorBSplineBasis<2,real_t> TBasis;
+        const short_t dim = mp.geoDim();
+
+        index_t globalMax = 0;
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
+        }
+
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                while ((index_t)tb.knots(d).numElements() < globalMax)
+                    mb[k].uniformRefine(1, 1, d);
+        }
+    }
+
     gsInfo << "done.\n";
 
     /********* Setup assembler and assemble matrix **********/
@@ -329,13 +353,16 @@ int main(int argc, char *argv[])
     gsMatrix<> x;
     x.setRandom( bdPrec->rows(), 1 );
 
-    // This is the main cg iteration
+    // This is the main minres iteration
     gsMatrix<> errorHistory;
+    gsStopwatch timer;
     gsMinimalResidual<>( ieti.saddlePointProblem(), bdPrec )
         .setOptions( cmd.getGroup("Solver") )
         .solveDetailed( ieti.rhsForSaddlePoint(), x, errorHistory );
+    const double solveTime = timer.stop();
 
-    gsInfo << "done.\n    Reconstruct solution from Lagrange multipliers... " << std::flush;
+    gsInfo << "done. Solve time: " << solveTime << " s\n"
+           << "    Reconstruct solution from Lagrange multipliers... " << std::flush;
 
     // Now, we want to have the global solution for u
     std::vector<gsMatrix<>> uLocal = primal.distributePrimalSolution(
