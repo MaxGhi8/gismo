@@ -171,6 +171,33 @@ int main(int argc, char *argv[])
         mb.uniformRefine();
     //! [Set degree and refine]
 
+    // Some patches in the input geometry may have more knot spans in one
+    // parametric direction than others (e.g. yeti_mp2.xml has patches with
+    // 1 and 2 initial spans). After uniform refinement this leads to
+    // different numbers of basis functions per patch. We enforce a square discretization:
+    // find the global maximum span count across all patches and all directions,
+    // then refine every patch in every direction until it matches that value.
+    {
+        typedef gsTensorBSplineBasis<2,real_t> TBasis;
+        const short_t dim = mp.geoDim();
+
+        index_t globalMax = 0;
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
+        }
+
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+            for (short_t d = 0; d < dim; ++d)
+                while ((index_t)tb.knots(d).numElements() < globalMax)
+                    mb[k].uniformRefine(1, 1, d);
+        }
+    }
+
     gsInfo << "done.\n";
 
     for ( size_t i = 0; i < mb.nBases(); ++ i )
@@ -400,10 +427,13 @@ int main(int argc, char *argv[])
     // This is the main cg iteration
     //! [Solve]
     gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
+    gsStopwatch timer;
     PCG.setOptions( cmd.getGroup("Solver") ).solveDetailed( rhsForSchur, lambda, errorHistory );
+    const double solveTime = timer.stop();
     //! [Solve]
 
-    gsInfo << "done.\n    Reconstruct solution from Lagrange multipliers... " << std::flush;
+    gsInfo << "done. Solve time: " << solveTime << " s\n"
+           << "    Reconstruct solution from Lagrange multipliers... " << std::flush;
     // Now, we want to have the global solution for u
     //! [Recover]
     std::vector<gsMatrix<>> uLocal = primal.distributePrimalSolution(
