@@ -63,9 +63,12 @@ public:
 
         if (use_cuda)
         {
-            OrtCUDAProviderOptions cuda_options{};
-            cuda_options.device_id = cuda_device_id;
-            session_options.AppendExecutionProvider_CUDA(cuda_options);
+            // Use V2 API to disable TF32: on Ampere/Ada GPUs TF32 reduces
+            // float32 matmul mantissa to 10 bits, causing O(1e-3) errors vs CPU.
+            Ort::CUDAProviderOptions cuda_options;
+            cuda_options.Update({{"device_id", std::to_string(cuda_device_id)},
+                                 {"use_tf32",  "0"}});
+            session_options.AppendExecutionProvider_CUDA_V2(*cuda_options);
         }
 
         m_session.reset(new Ort::Session(m_env, model_path.c_str(), session_options));
