@@ -1,0 +1,245 @@
+/** @file gsNeuralPrec.h
+
+    @brief ONNX-based neural-network preconditioner.
+
+    Wraps an ONNX Runtime session in a gsLinearOperator<T>, so an exported
+    PyTorch / Flax / ... model can be used as a preconditioner inside
+    gsConjugateGradient (or any other Krylov solver in G+Smo).
+
+    The model is loaded once. Per-call buffers, Ort::Value views and the
+    name pointer lists are all preallocated in the constructor, so apply()
+    does only a float<->real_t cast in, session.Run(), and a cast out.
+
+    Build: this header requires onnxruntime_cxx_api.h on the include path
+    and the onnxruntime shared library on the link line. See
+    examples/CMakeLists.txt for the ONNXRUNTIME_ROOT integration.
+
+    Author(s): M. Ghiotto
+*/
+
+#pragma once
+
+#include <gismo.h>
+#include <onnxruntime_cxx_api.h>
+
+#include <memory>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace gismo {
+
+/// @brief Neural-network preconditioner backed by an ONNX Runtime session.
+///
+/// The model must have N >= 1 named inputs and exactly one named output.
+/// One input is designated as the "primary" input at construction time;
+/// it receives the residual vector on every apply() call. Every other
+/// input must be bound via setAuxiliaryInput() before the first apply().
+///
+/// \tparam T scalar type used by G+Smo (typically real_t). ONNX tensors
+///         are float32; casts happen inside apply().
+template <class T>
+class gsNeuralPrec : public gsLinearOperator<T>
+{
+public:
+    typedef memory::shared_ptr<gsNeuralPrec> Ptr;
+    typedef memory::unique_ptr<gsNeuralPrec> uPtr;
+
+    gsNeuralPrec(const std::string & model_path,
+                 const std::string & primary_input_name,
+                 const std::string & output_name,
+                 bool   use_cuda         = false,
+                 int    cuda_device_id   = 0,
+                 int    intra_op_threads = 1)
+    : m_primaryInputName(primary_input_name),
+      m_outputName(output_name),
+      m_env(ORT_LOGGING_LEVEL_WARNING, "gsNeuralPrec"),
+      m_memInfo(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
+      m_outputValue(nullptr)
+    {
+        Ort::SessionOptions session_options;
+        session_options.SetIntraOpNumThreads(intra_op_threads);
+        session_options.SetGraphOptimizationLevel(ORT_ENABLE_EXTENDED);
+
+        if (use_cuda)
+        {
+            OrtCUDAProviderOptions cuda_options{};
+            cuda_options.device_id = cuda_device_id;
+            session_options.AppendExecutionProvider_CUDA(cuda_options);
+        }
+
+        m_session.reset(new Ort::Session(m_env, model_path.c_str(), session_options));
+
+        Ort::AllocatorWithDefaultOptions allocator;
+
+        const size_t n_inputs = m_session->GetInputCount();
+        m_inputNameStrs.reserve(n_inputs);
+        m_inputNames.reserve(n_inputs);
+        m_inputBuffers.resize(n_inputs);
+        m_inputShapes.resize(n_inputs);
+        m_inputValues.reserve(n_inputs);
+        m_inputBound.assign(n_inputs, false);
+
+        index_t primaryIdx = -1;
+        for (size_t i = 0; i < n_inputs; ++i)
+        {
+            auto name_ptr = m_session->GetInputNameAllocated(i, allocator);
+            m_inputNameStrs.emplace_back(name_ptr.get());
+            m_inputNames.push_back(m_inputNameStrs.back().c_str());
+
+            auto typeinfo_i = m_session->GetInputTypeInfo(i);  // keep alive
+            auto tinfo = typeinfo_i.GetTensorTypeAndShapeInfo();
+            std::vector<int64_t> shape = tinfo.GetShape();
+            // Dynamic dims (-1) are replaced with 1 (typical for the batch axis).
+            for (auto & d : shape) if (d < 0) d = 1;
+            m_inputShapes[i] = shape;
+
+            int64_t numel = 1;
+            for (auto d : shape) numel *= d;
+            m_inputBuffers[i].assign(static_cast<size_t>(numel), 0.0f);
+
+            m_inputValues.push_back(Ort::Value::CreateTensor<float>(
+                m_memInfo,
+                m_inputBuffers[i].data(),
+                static_cast<size_t>(numel),
+                m_inputShapes[i].data(),
+                m_inputShapes[i].size()));
+
+            if (m_inputNameStrs.back() == m_primaryInputName)
+            {
+                primaryIdx = static_cast<index_t>(i);
+                // Primary slot is "bound" by every apply() call, so mark it now
+                // to keep the readiness check simple.
+                m_inputBound[i] = true;
+            }
+        }
+
+        if (primaryIdx < 0)
+        {
+            std::ostringstream oss;
+            oss << "gsNeuralPrec: primary input '" << m_primaryInputName
+                << "' not found in model. Available inputs:";
+            for (const auto & n : m_inputNameStrs) oss << " " << n;
+            GISMO_ERROR(oss.str());
+        }
+        m_primaryIdx = primaryIdx;
+
+        GISMO_ASSERT(m_session->GetOutputCount() == 1,
+            "gsNeuralPrec: model must have exactly one output, has " << m_session->GetOutputCount());
+
+        auto out_name_ptr = m_session->GetOutputNameAllocated(0, allocator);
+        m_outputNameStr   = out_name_ptr.get();
+        GISMO_ASSERT(m_outputNameStr == m_outputName,
+            "gsNeuralPrec: requested output '" << m_outputName
+            << "' does not match the model's output '" << m_outputNameStr << "'");
+        m_outputNamePtr = m_outputNameStr.c_str();
+
+        auto typeinfo_out = m_session->GetOutputTypeInfo(0);  // keep alive
+        auto otinfo = typeinfo_out.GetTensorTypeAndShapeInfo();
+        m_outputShape = otinfo.GetShape();
+        for (auto & d : m_outputShape) if (d < 0) d = 1;
+        int64_t out_numel = 1;
+        for (auto d : m_outputShape) out_numel *= d;
+        m_outputBuffer.assign(static_cast<size_t>(out_numel), 0.0f);
+        m_outputValue = Ort::Value::CreateTensor<float>(
+            m_memInfo,
+            m_outputBuffer.data(),
+            static_cast<size_t>(out_numel),
+            m_outputShape.data(),
+            m_outputShape.size());
+
+        m_rows = static_cast<index_t>(m_inputBuffers[m_primaryIdx].size());
+        m_cols = static_cast<index_t>(m_outputBuffer.size());
+    }
+
+    /// @brief Bind (or update) a non-primary input. Data is cast to float and
+    /// copied into the preallocated input buffer; the bound value is reused
+    /// on every subsequent apply() until this method is called again.
+    void setAuxiliaryInput(const std::string & name, const gsMatrix<T> & data)
+    {
+        const index_t idx = findInputIndex(name);
+        GISMO_ASSERT(idx != m_primaryIdx,
+            "gsNeuralPrec: '" << name << "' is the primary input; "
+            "it is filled by apply() and cannot be set manually.");
+        GISMO_ASSERT(static_cast<size_t>(data.size()) == m_inputBuffers[idx].size(),
+            "gsNeuralPrec: shape mismatch for input '" << name << "': model expects "
+            << m_inputBuffers[idx].size() << " values, got " << data.size());
+
+        castIn(data.data(), m_inputBuffers[idx].data(), data.size());
+        m_inputBound[idx] = true;
+    }
+
+    void apply(const gsMatrix<T> & input, gsMatrix<T> & x) const override
+    {
+        GISMO_ASSERT(input.size() == m_rows,
+            "gsNeuralPrec::apply: input has size " << input.size()
+            << ", expected " << m_rows);
+
+        for (size_t i = 0; i < m_inputBound.size(); ++i)
+            GISMO_ASSERT(m_inputBound[i],
+                "gsNeuralPrec::apply: auxiliary input '" << m_inputNameStrs[i]
+                << "' has not been bound. Call setAuxiliaryInput() first.");
+
+        castIn(input.data(), m_inputBuffers[m_primaryIdx].data(), input.size());
+
+        m_session->Run(m_runOptions,
+                       m_inputNames.data(),
+                       m_inputValues.data(),
+                       m_inputValues.size(),
+                       &m_outputNamePtr,
+                       &m_outputValue,
+                       1);
+
+        x.resize(m_cols, 1);
+        castOut(m_outputBuffer.data(), x.data(), m_cols);
+    }
+
+    index_t rows() const override { return m_rows; }
+    index_t cols() const override { return m_cols; }
+
+private:
+    static void castIn(const T * src, float * dst, index_t n)
+    {
+        for (index_t i = 0; i < n; ++i) dst[i] = static_cast<float>(src[i]);
+    }
+    static void castOut(const float * src, T * dst, index_t n)
+    {
+        for (index_t i = 0; i < n; ++i) dst[i] = static_cast<T>(src[i]);
+    }
+
+    index_t findInputIndex(const std::string & name) const
+    {
+        for (size_t i = 0; i < m_inputNameStrs.size(); ++i)
+            if (m_inputNameStrs[i] == name) return static_cast<index_t>(i);
+        GISMO_ERROR("gsNeuralPrec: input '" << name << "' not found in model.");
+    }
+
+    std::string              m_primaryInputName;
+    std::string              m_outputName;
+    std::vector<std::string> m_inputNameStrs;   // owns the strings
+    std::vector<const char*> m_inputNames;      // pointers into the strings above
+    std::string              m_outputNameStr;
+    const char *             m_outputNamePtr = nullptr;
+
+    Ort::Env                          m_env;
+    Ort::MemoryInfo                   m_memInfo;
+    mutable std::unique_ptr<Ort::Session> m_session;     // Run() is non-const
+    Ort::RunOptions                   m_runOptions{nullptr};
+
+    // Buffers viewed by m_inputValues / m_outputValue. Mutable because apply()
+    // is logically const but must rewrite the input bytes and receive output.
+    mutable std::vector<std::vector<float>> m_inputBuffers;
+    std::vector<std::vector<int64_t>>       m_inputShapes;
+    mutable std::vector<Ort::Value>         m_inputValues;
+    std::vector<bool>                       m_inputBound;
+
+    mutable std::vector<float> m_outputBuffer;
+    std::vector<int64_t>       m_outputShape;
+    mutable Ort::Value         m_outputValue;
+
+    index_t m_primaryIdx = -1;
+    index_t m_rows = 0;
+    index_t m_cols = 0;
+};
+
+} // namespace gismo
