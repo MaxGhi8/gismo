@@ -269,23 +269,43 @@ int main(int argc, char *argv[])
     // for rationale). This guarantees mb[k].size() is the same for every k,
     // so a single ONNX model with one fixed input dimension can be used.
     {
-        typedef gsTensorBSplineBasis<2,real_t> TBasis;
-        const short_t dim = mp.geoDim();
-
+        const short_t dim = mp.domainDim();
         index_t globalMax = 0;
-        for (size_t k = 0; k < mb.nBases(); ++k)
+        if (dim == 2)
         {
-            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-            for (short_t d = 0; d < dim; ++d)
-                globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
-        }
+            typedef gsTensorBSplineBasis<2,real_t> TBasis;
+            for (size_t k = 0; k < mb.nBases(); ++k)
+            {
+                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+                for (short_t d = 0; d < dim; ++d)
+                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
+            }
 
-        for (size_t k = 0; k < mb.nBases(); ++k)
+            for (size_t k = 0; k < mb.nBases(); ++k)
+            {
+                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+                for (short_t d = 0; d < dim; ++d)
+                    while ((index_t)tb.knots(d).numElements() < globalMax)
+                        mb[k].uniformRefine(1, 1, d);
+            }
+        }
+        else if (dim == 3)
         {
-            TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-            for (short_t d = 0; d < dim; ++d)
-                while ((index_t)tb.knots(d).numElements() < globalMax)
-                    mb[k].uniformRefine(1, 1, d);
+            typedef gsTensorBSplineBasis<3,real_t> TBasis;
+            for (size_t k = 0; k < mb.nBases(); ++k)
+            {
+                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+                for (short_t d = 0; d < dim; ++d)
+                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
+            }
+
+            for (size_t k = 0; k < mb.nBases(); ++k)
+            {
+                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
+                for (short_t d = 0; d < dim; ++d)
+                    while ((index_t)tb.knots(d).numElements() < globalMax)
+                        mb[k].uniformRefine(1, 1, d);
+            }
         }
     }
 
