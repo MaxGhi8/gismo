@@ -23,6 +23,7 @@
 */
 
 #include <ctime>
+#include <set>
 #include <gismo.h>
 
 using namespace gismo;
@@ -134,9 +135,26 @@ static std::vector< gsMatrix<> > solveIetiDP(
             )
         );
 
+        // ---- Primal handling ----
+        auto const & pConstraints = ietiMapper.primalConstraints(k);
+        auto const & pDofIndices  = ietiMapper.primalDofIndices(k);
+
+        std::vector<gsSparseVector<real_t>> uniqueConstraints;
+        std::vector<index_t> uniqueDofIndices;
+        std::set<index_t> seen;
+        for (size_t i = 0; i < pDofIndices.size(); ++i)
+        {
+            if (seen.find(pDofIndices[i]) == seen.end())
+            {
+                uniqueConstraints.push_back(pConstraints[i]);
+                uniqueDofIndices.push_back(pDofIndices[i]);
+                seen.insert(pDofIndices[i]);
+            }
+        }
+
         primal.handleConstraints(
-            ietiMapper.primalConstraints(k),
-            ietiMapper.primalDofIndices(k),
+            uniqueConstraints,
+            uniqueDofIndices,
             jumpMatrix, localMatrix, localRhs
         );
 
@@ -419,9 +437,25 @@ static std::vector< gsMatrix<> > solveIetiAF(
         );
 
         // ---- Primal handling (uses the augmented jump matrix). ----
+        auto const & pConstraints = ietiMapper.primalConstraints(k);
+        auto const & pDofIndices  = ietiMapper.primalDofIndices(k);
+
+        std::vector<gsSparseVector<real_t>> uniqueConstraints;
+        std::vector<index_t> uniqueDofIndices;
+        std::set<index_t> seen;
+        for (size_t i = 0; i < pDofIndices.size(); ++i)
+        {
+            if (seen.find(pDofIndices[i]) == seen.end())
+            {
+                uniqueConstraints.push_back(pConstraints[i]);
+                uniqueDofIndices.push_back(pDofIndices[i]);
+                seen.insert(pDofIndices[i]);
+            }
+        }
+
         primal.handleConstraints(
-            ietiMapper.primalConstraints(k),
-            ietiMapper.primalDofIndices(k),
+            uniqueConstraints,
+            uniqueDofIndices,
             jumpAug, localMatrix, localRhs
         );
 
@@ -652,40 +686,31 @@ int main(int argc, char *argv[])
     {
         const short_t dim = mp.domainDim();
         index_t globalMax = 0;
-        if (dim == 2)
+        for (size_t k = 0; k < mb.nBases(); ++k)
         {
-            typedef gsTensorBSplineBasis<2,real_t> TBasis;
-            for (size_t k = 0; k < mb.nBases(); ++k)
+            const index_t total = mb[k].numElements();
+            for (short_t d = 0; d < dim; ++d)
             {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
-            }
-
-            for (size_t k = 0; k < mb.nBases(); ++k)
-            {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    while ((index_t)tb.knots(d).numElements() < globalMax)
-                        mb[k].uniformRefine(1, 1, d);
+                const index_t side_elements = mb[k].numElements(boxSide(d, 0));
+                const index_t n_dir = total / side_elements;
+                globalMax = std::max(globalMax, n_dir);
             }
         }
-        else if (dim == 3)
-        {
-            typedef gsTensorBSplineBasis<3,real_t> TBasis;
-            for (size_t k = 0; k < mb.nBases(); ++k)
-            {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
-            }
 
-            for (size_t k = 0; k < mb.nBases(); ++k)
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            for (short_t d = 0; d < dim; ++d)
             {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    while ((index_t)tb.knots(d).numElements() < globalMax)
+                while (true)
+                {
+                    const index_t total = mb[k].numElements();
+                    const index_t side_elements = mb[k].numElements(boxSide(d, 0));
+                    const index_t n_dir = total / side_elements;
+                    if (n_dir < globalMax)
                         mb[k].uniformRefine(1, 1, d);
+                    else
+                        break;
+                }
             }
         }
     }

@@ -1717,7 +1717,7 @@ bool gsFileData<T>::readBrepFile( String const & fn )
 namespace
 {
 
-#define MAXENTITY 1000    /* maximum number of entities recognised from IGES file */
+#define MAXENTITY 10000    /* maximum number of entities recognised from IGES file */
 #define FIELD_L 26  /*length of fixed length field in text file (sign, digits - double float) */
 
 enum entity_j_name{

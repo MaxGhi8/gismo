@@ -18,6 +18,7 @@
 */
 
 #include <ctime>
+#include <set>
 #include <gismo.h>
 
 using namespace gismo;
@@ -155,40 +156,31 @@ int main(int argc, char *argv[])
     {
         const short_t dim = mp.domainDim();
         index_t globalMax = 0;
-        if (dim == 2)
+        for (size_t k = 0; k < mb.nBases(); ++k)
         {
-            typedef gsTensorBSplineBasis<2,real_t> TBasis;
-            for (size_t k = 0; k < mb.nBases(); ++k)
+            const index_t total = mb[k].numElements();
+            for (short_t d = 0; d < dim; ++d)
             {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
-            }
-
-            for (size_t k = 0; k < mb.nBases(); ++k)
-            {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    while ((index_t)tb.knots(d).numElements() < globalMax)
-                        mb[k].uniformRefine(1, 1, d);
+                const index_t side_elements = mb[k].numElements(boxSide(d, 0));
+                const index_t n_dir = total / side_elements;
+                globalMax = std::max(globalMax, n_dir);
             }
         }
-        else if (dim == 3)
-        {
-            typedef gsTensorBSplineBasis<3,real_t> TBasis;
-            for (size_t k = 0; k < mb.nBases(); ++k)
-            {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    globalMax = std::max(globalMax, (index_t)tb.knots(d).numElements());
-            }
 
-            for (size_t k = 0; k < mb.nBases(); ++k)
+        for (size_t k = 0; k < mb.nBases(); ++k)
+        {
+            for (short_t d = 0; d < dim; ++d)
             {
-                TBasis& tb = dynamic_cast<TBasis&>(mb[k]);
-                for (short_t d = 0; d < dim; ++d)
-                    while ((index_t)tb.knots(d).numElements() < globalMax)
+                while (true)
+                {
+                    const index_t total = mb[k].numElements();
+                    const index_t side_elements = mb[k].numElements(boxSide(d, 0));
+                    const index_t n_dir = total / side_elements;
+                    if (n_dir < globalMax)
                         mb[k].uniformRefine(1, 1, d);
+                    else
+                        break;
+                }
             }
         }
     }
@@ -245,6 +237,10 @@ int main(int argc, char *argv[])
     const index_t bdPrecSz = nPatches + 1 + (ietiMapper.nPrimalDofs()>0?1:0);
     gsBlockOp<>::Ptr bdPrec = gsBlockOp<>::make(bdPrecSz,bdPrecSz);
 
+    //! [Assemble]
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
     for (index_t k=0; k<nPatches; ++k)
     {
         // We use the local variants of everything
@@ -290,54 +286,75 @@ int main(int argc, char *argv[])
         gsScaledDirichletPrec<>::Blocks blocks
             = gsScaledDirichletPrec<>::matrixBlocks(localMatrix, skeletonDofs);
 
-        prec.addSubdomain(
-            prec.restrictJumpMatrix(jumpMatrix, skeletonDofs).moveToPtr(),
-            gsScaledDirichletPrec<>::schurComplement( blocks, makeSparseCholeskySolver(blocks.A11) )
-        );
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+        {
+            prec.addSubdomain(
+                prec.restrictJumpMatrix(jumpMatrix, skeletonDofs).moveToPtr(),
+                gsScaledDirichletPrec<>::schurComplement( blocks, makeSparseCholeskySolver(blocks.A11) )
+            );
 
-        // Now, we handle the primal constraints.
-        //
-        // This can be done using primal.handleConstraints as in ieti_example.
-        // Here, we call the underlying commands directly to show how one can
-        // choose an alternative solver.
-        gsSparseMatrix<>  modifiedLocalMatrix, localEmbedding, embeddingForBasis;
-        gsMatrix<>        rhsForBasis;
+            // Now, we handle the primal constraints.
+            //
+            // This can be done using primal.handleConstraints as in ieti_example.
+            // Here, we call the underlying commands directly to show how one can
+            // choose an alternative solver.
+            auto const & pConstraints = ietiMapper.primalConstraints(k);
+            auto const & pDofIndices  = ietiMapper.primalDofIndices(k);
 
-        const bool eliminatePointwiseDofs = true;
+            std::vector<gsSparseVector<real_t>> uniqueConstraints;
+            std::vector<index_t> uniqueDofIndices;
+            std::set<index_t> seen;
+            for (size_t i = 0; i < pDofIndices.size(); ++i)
+            {
+                if (seen.find(pDofIndices[i]) == seen.end())
+                {
+                    uniqueConstraints.push_back(pConstraints[i]);
+                    uniqueDofIndices.push_back(pDofIndices[i]);
+                    seen.insert(pDofIndices[i]);
+                }
+            }
 
-        gsPrimalSystem<>::incorporateConstraints(
-            ietiMapper.primalConstraints(k),
-            eliminatePointwiseDofs,
-            localMatrix,
-            modifiedLocalMatrix,
-            localEmbedding,
-            embeddingForBasis,
-            rhsForBasis
-        );
+            gsSparseMatrix<>  modifiedLocalMatrix, localEmbedding, embeddingForBasis;
+            gsMatrix<>        rhsForBasis;
 
-        gsLinearOperator<>::Ptr localSolver = makeSparseLUSolver(modifiedLocalMatrix);
+            const bool eliminatePointwiseDofs = true;
 
-        primal.addContribution(
-            jumpMatrix, localMatrix, localRhs,
-            gsPrimalSystem<>::primalBasis(
-                localSolver, embeddingForBasis, rhsForBasis, ietiMapper.primalDofIndices(k), primal.nPrimalDofs()
-            )
-        );
-        gsMatrix<>                       modifiedLocalRhs     = localEmbedding.transpose() * localRhs;
-        gsSparseMatrix<real_t, RowMajor> modifiedJumpMatrix   = jumpMatrix * localEmbedding;
+            gsPrimalSystem<>::incorporateConstraints(
+                uniqueConstraints,
+                eliminatePointwiseDofs,
+                localMatrix,
+                modifiedLocalMatrix,
+                localEmbedding,
+                embeddingForBasis,
+                rhsForBasis
+            );
+
+            gsLinearOperator<>::Ptr localSolver = makeSparseLUSolver(modifiedLocalMatrix);
+
+            primal.addContribution(
+                jumpMatrix, localMatrix, localRhs,
+                gsPrimalSystem<>::primalBasis(
+                    localSolver, embeddingForBasis, rhsForBasis, uniqueDofIndices, primal.nPrimalDofs()
+                )
+            );
+            gsMatrix<>                       modifiedLocalRhs     = localEmbedding.transpose() * localRhs;
+            gsSparseMatrix<real_t, RowMajor> modifiedJumpMatrix   = jumpMatrix * localEmbedding;
 
 
-        // Register the local solver to the block preconditioner. We use
-        // a sparse LU solver since the local saddle point problem is not
-        // positive definite.
-        bdPrec->addOperator(k,k,localSolver);
+            // Register the local solver to the block preconditioner. We use
+            // a sparse LU solver since the local saddle point problem is not
+            // positive definite.
+            bdPrec->addOperator(k,k,localSolver);
 
-        // Add the patch to the Ieti system
-        ieti.addSubdomain(
-            modifiedJumpMatrix.moveToPtr(),
-            makeMatrixOp(modifiedLocalMatrix.moveToPtr()),
-            give(modifiedLocalRhs)
-        );
+            // Add the patch to the Ieti system
+            ieti.addSubdomain(
+                modifiedJumpMatrix.moveToPtr(),
+                makeMatrixOp(modifiedLocalMatrix.moveToPtr()),
+                give(modifiedLocalRhs)
+            );
+        }
     }
 
     // Add the primal problem if there are primal constraints
