@@ -2332,8 +2332,8 @@ bool gsFileData<T>::readIgesFile( String const & fn )
         }
     }
 
-    const bool fc = ( 0==fclose(fr) );
-    if (fc) gsWarn<< "File closing didn't succeeded!\n";
+    const bool fc = ( 0==fclose(fr) ); // fclose returns 0 on success
+    if (!fc) gsWarn<< "File closing did not succeed!\n";
     return fc;
 }
 
