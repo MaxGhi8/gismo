@@ -1,3 +1,14 @@
+# latex
+*.aux
+*.lof
+*.log
+*.fdb_latexmk
+*.fls
+*.out
+*.toc
+*.synctex.gz
+*.pdf
+
 # filedata
 filedata/onnx_models/
 
