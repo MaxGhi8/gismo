@@ -32,6 +32,8 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <algorithm>
 
 #include <gismo.h>
 
@@ -217,6 +219,8 @@ int main(int argc, char *argv[])
     std::string mgSmoother("GaussSeidel");
     index_t mgLevels = -1;
     std::string squareDiscr("global");
+    std::string chosenSolvers("CG,GMRES,MinRes,Multigrid");
+    std::string chosenPrecs("noprec,Jacobi,symm. Gauss-Seidel,Richardson,ILU,multigrid");
 
     gsCmdLine cmd("Fair benchmark of several linear solvers on one isogeometric Poisson discretization.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);
@@ -231,6 +235,8 @@ int main(int argc, char *argv[])
     cmd.addReal  ("t", "Solver.Tolerance",      "Stopping criterion for all iterative solvers", tolerance);
     cmd.addInt   ("",  "Solver.MaxIterations",  "Maximum iterations for all iterative solvers", maxIterations);
     cmd.addString("s", "MG.Smoother",           "Multigrid smoother (Richardson, Jacobi, GaussSeidel, IncompleteLU)", mgSmoother);
+    cmd.addString("",  "Solvers",               "Solvers to try (comma-separated list, e.g. CG,GMRES,MinRes) or 'all'. Available: CG, MinRes, MinRes-QLP, GMRES, BiCGStab, Gradient, Multigrid", chosenSolvers);
+    cmd.addString("",  "Preconditioners",       "Preconditioners to try (comma-separated list, e.g. Jacobi,ILU) or 'all'. Available: no prec, Jacobi, Gauss-Seidel, rev. Gauss-Seidel, symm. Gauss-Seidel, Richardson, ILU, multigrid", chosenPrecs);
 
     // Multigrid sub-options consumed by gsGridHierarchy / gsMultiGridOp.
     cmd.addInt   ("l", "MG.Levels",             "Number of multigrid levels (default: = Refinements)", mgLevels);
@@ -599,9 +605,21 @@ int main(int argc, char *argv[])
     }
     gsInfo << "done.\n";
 
+    auto isSelected = [](std::string name, std::string list) {
+        if (list == "all") return true;
+        std::stringstream ss(list);
+        std::string item;
+        while (std::getline(ss, item, ',')) {
+            if (item == name) return true;
+        }
+        return false;
+    };
+
     auto runAllPrec = [&](const std::string& solverName, auto solverTag) {
+        if (!isSelected(solverName, chosenSolvers)) return;
         typedef typename decltype(solverTag)::type SType;
         for (auto const& p : preconditioners) {
+            if (!isSelected(p.name, chosenPrecs)) continue;
             results.push_back(runGlobalSolver<SType>(
                 solverName + " + " + p.name, K, F, p.op, solverOpt, mp, A, u, uExact, p.setupTime));
         }
@@ -614,6 +632,20 @@ int main(int argc, char *argv[])
     runAllPrec("GMRES",       solver_tag<gsGMRes<>>{});
     runAllPrec("BiCGStab",    solver_tag<gsBiCgStab<>>{});
     runAllPrec("Gradient",    solver_tag<gsGradientMethod<>>{});
+
+    // Special case: Multigrid standalone (as it was in the original version)
+    if (isSelected("Multigrid", chosenSolvers))
+    {
+        gsLinearOperator<>::Ptr mg;
+        double mgSetupTime = 0;
+        for (auto const& p : preconditioners) if (p.name == "multigrid") { mg = p.op; mgSetupTime = p.setupTime; break; }
+
+        if (mg)
+        {
+            results.push_back(runGlobalSolver<gsGradientMethod<>>(
+                "Multigrid (standalone)", K, F, mg, solverOpt, mp, A, u, uExact, mgSetupTime));
+        }
+    }
     gsInfo << "done.\n";
 
     /**************** IETI-DP (ported from ieti_example.cpp) ****************/
