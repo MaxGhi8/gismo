@@ -37,16 +37,58 @@
 
 using namespace gismo;
 
+// Helper tag to pass types to the benchmark loop lambda.
+template<typename T> struct solver_tag { typedef T type; };
+
 // A single benchmark record. iters == -1 marks the direct solver (no iterations).
+// The reconstructed solution field is retained so that, when the manufactured
+// exact solution is not applicable (curved surface or Neumann data), the methods
+// can still be cross-checked against a common reference solution.
 struct BenchResult
 {
-    std::string name;
-    index_t     iters;
-    double      setupTime;
-    double      solveTime;
-    real_t      l2err;
-    bool        converged;
+    std::string    name;
+    index_t        iters;
+    double         setupTime;
+    double         solveTime;
+    real_t         l2err;
+    bool           converged;
+    gsMultiPatch<> sol;
 };
+
+// Numbering-independent L2 distance between two reconstructed solution fields on
+// the same geometry. Used as a method-agreement check when the manufactured
+// exact solution is not a valid reference (see l2Meaningful below).
+real_t l2FieldDistance(const gsMultiPatch<>& mp,
+                       const gsMultiPatch<>& a,
+                       const gsMultiPatch<>& b)
+{
+    gsField<> fa(mp, a);
+    gsField<> fb(mp, b);
+    return fa.distanceL2(fb);
+}
+
+// Subtract the mean of the control values from a scalar solution field. For a
+// partition-of-unity basis (B-splines, NURBS) the constant function equals the
+// constant control value, so this removes the additive constant from the field
+// itself. Used to compare solutions of a pure-Neumann (singular) problem, whose
+// solution is only defined up to a constant: different solvers pick different
+// constants (a direct solve of the singular system even returns a huge one), but
+// the non-constant part is unique, so comparing modulo the constant reveals the
+// genuine agreement.
+gsMultiPatch<> removeConstant(gsMultiPatch<> sol)
+{
+    real_t  sum = 0;
+    index_t n   = 0;
+    for (size_t p = 0; p < sol.nPatches(); ++p)
+    {
+        sum += sol.patch(p).coefs().sum();
+        n   += sol.patch(p).coefs().size();
+    }
+    const real_t mean = (n > 0) ? sum / n : 0;
+    for (size_t p = 0; p < sol.nPatches(); ++p)
+        sol.patch(p).coefs().array() -= mean;
+    return sol;
+}
 
 // Numbering-independent accuracy measure shared by every method: the L2 distance
 // between the reconstructed solution field and the manufactured exact solution.
@@ -59,17 +101,35 @@ real_t l2ErrorVsExact(const gsMultiPatch<>& mp,
     return solField.distanceL2(uExact, false);
 }
 
-// Shared CG driver for the global system. Builds the result record (including the
-// L2 error of the reconstructed field) for the given preconditioner.
-BenchResult runGlobalCG(const std::string&            name,
-                        const gsSparseMatrix<>&       K,
-                        const gsMatrix<>&             F,
-                        const gsLinearOperator<>::Ptr& prec,
-                        const gsOptionList&           solverOpt,
-                        const gsMultiPatch<>&         mp,
-                        gsPoissonAssembler<>&         assembler,
-                        const gsFunctionExpr<>&       uExact,
-                        double                        setupTime)
+// Reconstruct the global multipatch solution from a solution vector using the
+// expression-assembler space (which carries the eliminated Dirichlet values).
+// Unlike gsAssembler/gsPoissonAssembler, the expression assembler computes the
+// physical gradient with the Moore-Penrose pseudo-inverse of the Jacobian, so it
+// is correct for surfaces embedded in 3D (manifolds), not only for square maps.
+gsMultiPatch<> reconstructGlobal(const gsExprAssembler<>&        A,
+                                 const gsExprAssembler<>::space& u,
+                                 gsMatrix<>&                     x)
+{
+    gsMultiPatch<> sol;
+    gsExprAssembler<>::solution u_sol = A.getSolution(u, x);
+    u_sol.extract(sol);
+    return sol;
+}
+
+// Shared iterative solver driver for the global system. Builds the result record
+// (including the L2 error of the reconstructed field) for the given solver type
+// and preconditioner.
+template<typename SolverType>
+BenchResult runGlobalSolver(const std::string&             name,
+                            const gsSparseMatrix<>&        K,
+                            const gsMatrix<>&              F,
+                            const gsLinearOperator<>::Ptr& prec,
+                            const gsOptionList&            solverOpt,
+                            const gsMultiPatch<>&          mp,
+                            const gsExprAssembler<>&       A,
+                            const gsExprAssembler<>::space& u,
+                            const gsFunctionExpr<>&        uExact,
+                            double                         setupTime)
 {
     const real_t tol = solverOpt.getReal("Tolerance");
 
@@ -80,22 +140,64 @@ BenchResult runGlobalCG(const std::string&            name,
 
     gsMatrix<> errorHistory;
     gsStopwatch timer;
-    gsConjugateGradient<>(K, prec)
+    SolverType(K, prec)
         .setOptions(solverOpt)
         .solveDetailed(F, x, errorHistory);
     const double solveTime = timer.stop();
 
     const index_t iters    = errorHistory.rows() - 1;
-    const bool    converged = errorHistory(iters, 0) < tol;
+    const bool    converged = (iters >= 0) && (errorHistory(iters, 0) < tol);
 
-    gsMultiPatch<> sol;
-    assembler.constructSolution(x, sol);
+    gsMultiPatch<> sol = reconstructGlobal(A, u, x);
     const real_t l2err = l2ErrorVsExact(mp, sol, uExact);
 
     BenchResult r;
     r.name = name; r.iters = iters; r.setupTime = setupTime;
     r.solveTime = solveTime; r.l2err = l2err; r.converged = converged;
+    r.sol = give(sol);
     return r;
+}
+
+// Elements (knot spans) of patch k of mb in parameter direction d.
+static index_t elementsInDir(const gsMultiBasis<>& mb, size_t k, short_t d)
+{
+    return mb[k].numElements() / mb[k].numElements(boxSide(d, 0));
+}
+
+// Build the benchmark discretization basis: extract it from the geometry, set the
+// degree, and refine uniformly (-r). The "square-discretization" mode then controls
+// the element count per direction:
+//   "off"    - keep the native -p/-r knots (lightest). Works only if the input is
+//              already interface-conforming.
+//   "global" - refine every patch/direction up to the global maximum element count,
+//              making every patch identical (heaviest; always conforming). Each level
+//              doubles all directions, so the buildByRefinement invariant holds.
+gsMultiBasis<> makeBenchBasis(const gsMultiPatch<>& mp, index_t degree,
+                              index_t refinements, const std::string& squareMode)
+{
+    gsMultiBasis<> mb(mp);
+
+    for ( size_t i = 0; i < mb.nBases(); ++ i )
+        mb[i].setDegreePreservingMultiplicity(degree);
+
+    for ( index_t i = 0; i < refinements; ++i )
+        mb.uniformRefine();
+
+    if (squareMode != "global")
+        return mb;
+
+    const short_t dim = mp.domainDim();
+    index_t target = 0;
+    for (size_t k = 0; k < mb.nBases(); ++k)
+        for (short_t d = 0; d < dim; ++d)
+            target = std::max(target, elementsInDir(mb, k, d));
+
+    for (size_t k = 0; k < mb.nBases(); ++k)
+        for (short_t d = 0; d < dim; ++d)
+            while (elementsInDir(mb, k, d) < target)
+                mb[k].uniformRefine(1, 1, d);
+
+    return mb;
 }
 
 int main(int argc, char *argv[])
@@ -114,6 +216,7 @@ int main(int argc, char *argv[])
     index_t maxIterations = 1000;
     std::string mgSmoother("GaussSeidel");
     index_t mgLevels = -1;
+    std::string squareDiscr("global");
 
     gsCmdLine cmd("Fair benchmark of several linear solvers on one isogeometric Poisson discretization.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);
@@ -121,6 +224,7 @@ int main(int argc, char *argv[])
     cmd.addReal  ("",  "StretchGeometry",       "Stretch geometry in x-direction by the given factor", stretchGeometry);
     cmd.addInt   ("r", "Refinements",           "Number of uniform h-refinement steps to perform before solving", refinements);
     cmd.addInt   ("p", "Degree",                "Degree of the B-spline discretization space", degree);
+    cmd.addString("",  "SquareDiscretization",  "Element equalisation: off (native, lightest, conforming inputs only) | global (all patches identical, always safe)", squareDiscr);
     cmd.addString("b", "BoundaryConditions",    "Boundary conditions", boundaryConditions);
     cmd.addString("c", "Primals",               "IETI primal constraints (c=corners, e=edges, f=faces)", primals);
     cmd.addSwitch("e", "EliminateCorners",      "IETI: eliminate corners (if they are primals)", eliminateCorners);
@@ -135,6 +239,18 @@ int main(int argc, char *argv[])
 
     // Default case is levels := refinements, so replace the invalid default.
     if (mgLevels < 0) { mgLevels = refinements; cmd.setInt("MG.Levels", mgLevels); }
+
+    if (squareDiscr != "off" && squareDiscr != "global")
+    {
+        gsInfo << "Invalid --SquareDiscretization '" << squareDiscr
+               << "'. Use one of: off, global.\n";
+        return EXIT_FAILURE;
+    }
+    if (squareDiscr == "off")
+        gsWarn << "SquareDiscretization=off keeps the native (lightest) discretization. "
+                  "It is only valid if the input patches are interface-conforming (true for "
+                  "well-formed XML multipatches, e.g. yeti). On a non-conforming CAD import "
+                  "(e.g. an IGES surface) the IETI-DP solver will fail; use 'repair' or 'global'.\n";
 
     if ( ! gsFileManager::fileExists(geometry) )
     {
@@ -157,6 +273,14 @@ int main(int argc, char *argv[])
     }
     gsMultiPatch<>& mp = *mpPtr;
 
+    // Domains stored as XML carry their topology (interfaces + boundary) in the
+    // file, but CAD formats like IGES/STEP do not: the patches arrive as a bag of
+    // surfaces with no connectivity. Without topology, mp has no registered
+    // boundary sides, so no Dirichlet conditions get assigned below and the global
+    // Poisson system becomes pure-Neumann / singular -- its "solution" is then an
+    // arbitrary null-space vector (~1e+14). Recover the topology by geometric
+    // matching when the file did not provide it: matching sides become interfaces
+    // (gluing the patches), unmatched sides become boundary (and get Dirichlet).
     for (index_t i=0; i<splitPatches; ++i)
     {
         gsInfo << "split patches uniformly... " << std::flush;
@@ -168,6 +292,21 @@ int main(int argc, char *argv[])
         gsInfo << "and stretch it... " << std::flush;
         for (size_t i=0; i!=mp.nPatches(); ++i)
             const_cast<gsGeometry<>&>(mp[i]).scale(stretchGeometry,0);
+    }
+
+    // Ensure a usable topology. Domains stored as XML carry interfaces + boundary
+    // in the file; CAD formats like IGES/STEP arrive as a bag of surfaces with no
+    // connectivity, and uniformSplit() on such an input drops the boundary sides
+    // (it registers the new internal interfaces but leaves nBoundary == 0). With no
+    // boundary there are no Dirichlet conditions, so the global Poisson system is
+    // pure-Neumann / singular and its "solution" is an arbitrary null-space vector
+    // (~1e+14). Recompute the topology by geometric matching whenever no boundary
+    // side is registered: matching sides become interfaces (gluing patches),
+    // unmatched sides become boundary (and thus receive Dirichlet data).
+    if (mp.nBoundary() == 0)
+    {
+        gsInfo << "(no boundary registered, computing topology) " << std::flush;
+        mp.computeTopology();
     }
 
     gsInfo << "done.\n";
@@ -190,6 +329,10 @@ int main(int argc, char *argv[])
     // Neumann, the discrete problem no longer matches uExact and the L2 error is
     // meaningless. We track that here and suppress the column in that case.
     bool hasNeumann = false;
+    // If no Dirichlet condition is set anywhere (a closed surface has no boundary,
+    // or the user asked for all-Neumann), the global Poisson system is pure Neumann
+    // and hence singular: its solution is only defined up to an additive constant.
+    bool hasDirichlet = false;
 
     gsBoundaryConditions<> bc;
     {
@@ -209,7 +352,10 @@ int main(int argc, char *argv[])
             }
 
             if ( b_local == 'd' )
+            {
                 bc.addCondition( *it, condition_type::dirichlet, &gD );
+                hasDirichlet = true;
+            }
             else if ( b_local == 'n' )
             {
                 bc.addCondition( *it, condition_type::neumann, &gN );
@@ -229,59 +375,48 @@ int main(int argc, char *argv[])
 
     /************ Setup bases and adjust degree *************/
 
-    gsMultiBasis<> mb(mp);
-
     gsInfo << "Setup bases and adjust degree... " << std::flush;
 
-    for ( size_t i = 0; i < mb.nBases(); ++ i )
-        mb[i].setDegreePreservingMultiplicity(degree);
-
-    for ( index_t i = 0; i < refinements; ++i )
-        mb.uniformRefine();
-
-    // Enforce a square discretization: some input patches start with a different
-    // number of knot spans per direction (e.g. yeti_mp2.xml). Refine every patch
-    // in every direction until it matches the global maximum span count. (Carried
-    // over verbatim from ieti_example.cpp so the IETI setup is identical.)
-    {
-        const short_t dim = mp.domainDim();
-        index_t globalMax = 0;
-        for (size_t k = 0; k < mb.nBases(); ++k)
-        {
-            const index_t total = mb[k].numElements();
-            for (short_t d = 0; d < dim; ++d)
-            {
-                const index_t side_elements = mb[k].numElements(boxSide(d, 0));
-                const index_t n_dir = total / side_elements;
-                globalMax = std::max(globalMax, n_dir);
-            }
-        }
-
-        for (size_t k = 0; k < mb.nBases(); ++k)
-        {
-            for (short_t d = 0; d < dim; ++d)
-            {
-                while (true)
-                {
-                    const index_t total = mb[k].numElements();
-                    const index_t side_elements = mb[k].numElements(boxSide(d, 0));
-                    const index_t n_dir = total / side_elements;
-                    if (n_dir < globalMax)
-                        mb[k].uniformRefine(1, 1, d);
-                    else
-                        break;
-                }
-            }
-        }
-    }
+    // mb is the assembled (finest) basis; --SquareDiscretization controls the
+    // per-direction element equalisation (see makeBenchBasis).
+    gsMultiBasis<> mb = makeBenchBasis(mp, degree, refinements, squareDiscr);
 
     gsInfo << "done.\n";
 
-    for ( size_t i = 0; i < mb.nBases(); ++ i )
+    // Summarise the discretization instead of printing one line per patch (a
+    // CAD import can have thousands of patches). Report the per-direction degree,
+    // number of knots and basis-function count for a representative patch, and the
+    // total over all patches; flag whether every patch shares the same structure.
     {
-        gsInfo << "Patch " << i << ": Degree " << mb[i].degree(0);
-        for (short_t d = 1; d < mb[i].domainDim(); ++d) gsInfo << "x" << mb[i].degree(d);
-        gsInfo << ", " << mb[i].size() << " basis functions.\n";
+        const short_t dim = mb[0].domainDim();
+        bool uniform = true;
+        for (size_t k = 1; k < mb.nBases() && uniform; ++k)
+        {
+            if (mb[k].domainDim() != dim || mb[k].size() != mb[0].size())
+                uniform = false;
+            for (short_t d = 0; d < dim && uniform; ++d)
+                if (mb[k].degree(d) != mb[0].degree(d) ||
+                    mb[k].component(d).size() != mb[0].component(d).size())
+                    uniform = false;
+        }
+
+        index_t totalDofs = 0;
+        for (size_t k = 0; k < mb.nBases(); ++k) totalDofs += mb[k].size();
+
+        gsInfo << mb.nBases() << " patches"
+               << (uniform ? " (all identical)" : " (patches differ; showing patch 0)") << ".\n";
+        gsInfo << "  Patch 0: degree ";
+        for (short_t d = 0; d < dim; ++d) gsInfo << (d ? "x" : "") << mb[0].degree(d);
+        gsInfo << ", knots ";
+        for (short_t d = 0; d < dim; ++d)
+            gsInfo << (d ? "x" : "") << (mb[0].component(d).size() + mb[0].degree(d) + 1);
+        gsInfo << ", " << mb[0].size() << " basis functions.\n";
+        // NB: this sum counts each shared interface basis function once per patch and
+        // does NOT eliminate Dirichlet dofs, so it is the un-glued (IETI-style local)
+        // total -- larger than the coupled global system that direct/CG/multigrid
+        // solve. The coupled size is reported on the assembler line below.
+        gsInfo << "  Sum over all patches (un-glued, before interface gluing/BC "
+                  "elimination): " << totalDofs << ".\n";
     }
 
     const gsOptionList solverOpt = cmd.getGroup("Solver");
@@ -290,18 +425,83 @@ int main(int argc, char *argv[])
 
     /******** Assemble the global system (single source of truth) ********/
 
-    gsInfo << "\nAssemble global system (gsPoissonAssembler)... " << std::flush;
+    // Assembled with the expression-template engine (gsExprAssembler). Its
+    // physical-gradient transform uses the Moore-Penrose pseudo-inverse of the
+    // Jacobian and is therefore correct on surfaces embedded in 3D (manifolds).
+    // The classical gsPoissonAssembler/gsAssembler path instead uses
+    // jacobian.cramerInverse(), which is valid only for a square Jacobian
+    // (domainDim == geoDim) and silently builds a garbage stiffness matrix on a
+    // manifold. The weak form, Dirichlet strategy and Neumann term below are
+    // identical to the per-patch IETI assembly, so every method discretizes one
+    // and the same problem on every geometry.
+    typedef gsExprAssembler<>::geometryMap geometryMap;
+    typedef gsExprAssembler<>::space       space;
+    typedef gsExprAssembler<>::variable    variable;
+
+    gsInfo << "\nAssemble global system (gsExprAssembler)... " << std::flush;
     gsStopwatch timer;
-    gsPoissonAssembler<> assembler(
-        mp, mb, bc, f,
-        dirichlet::elimination,
-        iFace::glue
-    );
-    assembler.assemble();
+
+    const bool singular = !hasDirichlet;
+
+    gsExprAssembler<> A(1,1);
+    A.setIntegrationElements(mb);
+    geometryMap G = A.getMap(mp);
+    space       u = A.getSpace(mb);
+
+    bc.setGeoMap(mp);
+    u.setup(bc, dirichlet::interpolation, 0);
+
+    // Pure-Neumann (closed surface, no Dirichlet) Poisson is solvable only if the
+    // source is compatible, integral_S f dS = 0. The manufactured f does not satisfy
+    // that, so subtract its surface average. We modify f itself, so the global
+    // assembler AND the per-patch IETI assembly below both become compatible and
+    // hence solve the same well-posed problem (unique up to a constant, which the
+    // zero-mean comparison fixes).
+    if (singular)
+    {
+        gsExprEvaluator<> ev(A);
+        auto fv = ev.getVariable(f, G);
+        const real_t cf = ev.integral(fv * meas(G)) / ev.integral(meas(G));
+        f = gsFunctionExpr<>("2*sin(x)*cos(y) - (" + std::to_string(cf) + ")", mp.geoDim());
+        gsInfo << "[pure Neumann] subtracting mean(f)=" << cf
+               << " to make the RHS compatible... " << std::flush;
+    }
+
+    A.initSystem();
+    auto ff = A.getCoeff(f, G);
+    A.assemble( igrad(u, G) * igrad(u, G).tr() * meas(G), u * ff * meas(G) );
+
+    variable g_N = A.getBdrFunction();
+    A.assembleBdr( bc.get("Neumann"), u * g_N.val() * nv(G).norm() );
+
+    // For the singular (pure-Neumann) case, pin one dof so the assembled system is
+    // SPD and every solver works (the multigrid coarse Cholesky in particular needs
+    // a non-singular matrix). The fixed gauge (u_0 = 0) is washed out by the
+    // zero-mean comparison used for the L2 column. The system is already compatible
+    // (above), so a solution with u_0 = 0 exists and the pin selects it.
+    gsSparseMatrix<> Kpinned;
+    gsMatrix<>       Fpinned;
+    const gsSparseMatrix<>* Kptr = &A.matrix();
+    const gsMatrix<>*       Fptr = &A.rhs();
+    if (singular)
+    {
+        Kpinned = A.matrix();
+        Fpinned = A.rhs();
+        const index_t j = 0;
+        for (index_t k = 0; k < Kpinned.outerSize(); ++k)
+            for (gsSparseMatrix<>::InnerIterator it(Kpinned, k); it; ++it)
+                if (it.row() == j || it.col() == j)
+                    it.valueRef() = (it.row() == j && it.col() == j) ? 1.0 : 0.0;
+        Fpinned(j, 0) = 0;
+        Kptr = &Kpinned;
+        Fptr = &Fpinned;
+    }
+
     const double globalAssembleTime = timer.stop();
-    const gsSparseMatrix<>& K = assembler.matrix();
-    const gsMatrix<>&       F = assembler.rhs();
-    gsInfo << "done (" << globalAssembleTime << " s, " << K.rows() << " dofs).\n";
+    const gsSparseMatrix<>& K = *Kptr;
+    const gsMatrix<>&       F = *Fptr;
+    gsInfo << "done (" << globalAssembleTime << " s, " << K.rows()
+           << " coupled dofs = global system size solved by direct/CG/multigrid).\n";
 
     /**************** Direct solver (reference) ****************/
 
@@ -313,56 +513,64 @@ int main(int argc, char *argv[])
         gsMatrix<> x = solver.solve(F);
         const double solveTime = timer.stop();
 
-        gsMultiPatch<> sol;
-        assembler.constructSolution(x, sol);
+        gsMultiPatch<> sol = reconstructGlobal(A, u, x);
         BenchResult r;
         r.name = "Direct (Cholesky)"; r.iters = -1; r.setupTime = globalAssembleTime;
         r.solveTime = solveTime; r.l2err = l2ErrorVsExact(mp, sol, uExact);
         r.converged = true;
+        r.sol = give(sol);
         results.push_back(r);
     }
     gsInfo << "done.\n";
 
-    /**************** Preconditioned CG variants ****************/
+    /**************** Preconditioned benchmark loop ****************/
 
-    // Each preconditioner is a gsLinearOperator applied once per CG iteration.
-    // For CG validity the preconditioner must be SPD: identity, Jacobi, Richardson
-    // and symmetric Gauss-Seidel qualify. ILU is included because the user asked
-    // for it; it is the gismo-provided option but is not guaranteed SPD.
-    gsInfo << "Solve: CG variants... " << std::flush;
+    struct PrecRecord {
+        std::string name;
+        gsLinearOperator<>::Ptr op;
+        double setupTime;
+    };
+    std::vector<PrecRecord> preconditioners;
 
-    results.push_back(runGlobalCG("CG (no prec)", K, F,
-        gsIdentityOp<>::make(K.rows()), solverOpt, mp, assembler, uExact, globalAssembleTime));
-
-    results.push_back(runGlobalCG("CG + Jacobi", K, F,
-        makeJacobiOp(K), solverOpt, mp, assembler, uExact, globalAssembleTime));
-
-    results.push_back(runGlobalCG("CG + sym. Gauss-Seidel (SSOR)", K, F,
-        makeSymmetricGaussSeidelOp(K), solverOpt, mp, assembler, uExact, globalAssembleTime));
-
-    results.push_back(runGlobalCG("CG + Richardson", K, F,
-        makeRichardsonOp(K), solverOpt, mp, assembler, uExact, globalAssembleTime));
+    preconditioners.push_back({"no prec", gsIdentityOp<>::make(K.rows()), globalAssembleTime});
+    preconditioners.push_back({"Jacobi", makeJacobiOp(K), globalAssembleTime});
+    preconditioners.push_back({"Gauss-Seidel", makeGaussSeidelOp(K), globalAssembleTime});
+    preconditioners.push_back({"rev. Gauss-Seidel", makeReverseGaussSeidelOp(K), globalAssembleTime});
+    preconditioners.push_back({"symm. Gauss-Seidel", makeSymmetricGaussSeidelOp(K), globalAssembleTime});
+    preconditioners.push_back({"Richardson", makeRichardsonOp(K), globalAssembleTime});
 
     {
         timer.restart();
         gsLinearOperator<>::Ptr iluPrec = makeIncompleteLUOp(K);
-        const double iluSetup = globalAssembleTime + timer.stop();
-        results.push_back(runGlobalCG("CG + ILU", K, F,
-            iluPrec, solverOpt, mp, assembler, uExact, iluSetup));
+        preconditioners.push_back({"ILU", iluPrec, globalAssembleTime + timer.stop()});
     }
-    gsInfo << "done.\n";
 
-    /**************** Multigrid (standalone + as CG preconditioner) ****************/
+    // MG setup logic
+    bool basisIsRational = false;
+    for (size_t k = 0; k < mb.nBases(); ++k)
+        if (mb.basis(k).isRational()) { basisIsRational = true; break; }
 
-    gsInfo << "Solve: multigrid (smoother: " << mgSmoother << ")... " << std::flush;
+    gsInfo << "Setup multigrid (smoother: " << mgSmoother
+           << (basisIsRational ? ", NURBS hierarchy built by refinement" : "")
+           << ")... " << std::flush;
     {
         timer.restart();
         const gsOptionList mgOpt = cmd.getGroup("MG");
 
-        // buildByCoarsening consumes its multibasis argument, so feed it a copy.
         std::vector< gsSparseMatrix<real_t,RowMajor> > transferMatrices;
-        gsGridHierarchy<>::buildByCoarsening(gsMultiBasis<>(mb), bc, mgOpt)
-            .moveTransferMatricesTo(transferMatrices);
+        if (basisIsRational)
+        {
+            const index_t levels     = std::min(mgLevels, refinements) + 1;
+            const index_t coarseRefs = refinements - (levels - 1);
+            gsMultiBasis<> coarseBasis = makeBenchBasis(mp, degree, coarseRefs, squareDiscr);
+            gsGridHierarchy<>::buildByRefinement(give(coarseBasis), bc, mgOpt, levels)
+                .moveTransferMatricesTo(transferMatrices);
+        }
+        else
+        {
+            gsGridHierarchy<>::buildByCoarsening(gsMultiBasis<>(mb), bc, mgOpt)
+                .moveTransferMatricesTo(transferMatrices);
+        }
 
         gsMultiGridOp<>::Ptr mg = gsMultiGridOp<>::make(K, transferMatrices);
         mg->setOptions(mgOpt);
@@ -387,33 +595,25 @@ int main(int argc, char *argv[])
             }
             mg->setSmoother(i, smootherOp);
         }
-        const double mgSetup = globalAssembleTime + timer.stop();
-
-        // (a) Multigrid as a standalone (stationary) solver.
-        {
-            std::srand(1);
-            gsMatrix<> x; x.setRandom(K.rows(), 1);
-            gsMatrix<> errorHistory;
-            timer.restart();
-            gsGradientMethod<>(K, mg)
-                .setOptions(solverOpt)
-                .solveDetailed(F, x, errorHistory);
-            const double solveTime = timer.stop();
-
-            const index_t iters     = errorHistory.rows() - 1;
-            const bool    converged = errorHistory(iters, 0) < tolerance;
-            gsMultiPatch<> sol; assembler.constructSolution(x, sol);
-            BenchResult r;
-            r.name = "Multigrid (standalone)"; r.iters = iters; r.setupTime = mgSetup;
-            r.solveTime = solveTime; r.l2err = l2ErrorVsExact(mp, sol, uExact);
-            r.converged = converged;
-            results.push_back(r);
-        }
-
-        // (b) The same multigrid operator as a preconditioner for CG.
-        results.push_back(runGlobalCG("CG + multigrid", K, F,
-            mg, solverOpt, mp, assembler, uExact, mgSetup));
+        preconditioners.push_back({"multigrid", mg, globalAssembleTime + timer.stop()});
     }
+    gsInfo << "done.\n";
+
+    auto runAllPrec = [&](const std::string& solverName, auto solverTag) {
+        typedef typename decltype(solverTag)::type SType;
+        for (auto const& p : preconditioners) {
+            results.push_back(runGlobalSolver<SType>(
+                solverName + " + " + p.name, K, F, p.op, solverOpt, mp, A, u, uExact, p.setupTime));
+        }
+    };
+
+    gsInfo << "Solve: iterative benchmark loop... " << std::flush;
+    runAllPrec("CG",          solver_tag<gsConjugateGradient<>>{});
+    runAllPrec("MinRes",      solver_tag<gsMinimalResidual<>>{});
+    runAllPrec("MinRes-QLP",  solver_tag<gsMinResQLP<>>{});
+    runAllPrec("GMRES",       solver_tag<gsGMRes<>>{});
+    runAllPrec("BiCGStab",    solver_tag<gsBiCgStab<>>{});
+    runAllPrec("Gradient",    solver_tag<gsGradientMethod<>>{});
     gsInfo << "done.\n";
 
     /**************** IETI-DP (ported from ieti_example.cpp) ****************/
@@ -579,23 +779,67 @@ int main(int argc, char *argv[])
         r.name = "IETI-DP (CG on Schur)"; r.iters = iters; r.setupTime = ietiSetup;
         r.solveTime = ietiSolve; r.l2err = l2ErrorVsExact(mp, sol, uExact);
         r.converged = converged;
+        r.sol = give(sol);
         results.push_back(r);
+
+        // IETI does NOT solve the coupled global system; it solves a CG on the Schur
+        // complement of the Lagrange multipliers plus a primal coarse problem and one
+        // local solve per patch. Report those sizes so the 'iters' column is read in
+        // context (they count CG steps on this much smaller operator).
+        gsInfo << "\n  IETI sizes: " << ieti.nLagrangeMultipliers()
+               << " Lagrange multipliers (the CG/Schur system size), "
+               << ietiMapper.nPrimalDofs() << " primal dofs, " << nPatches
+               << " local patch solves. ";
     }
     gsInfo << "done.\n";
 
     /******************** Print benchmark table ********************/
 
-    // The L2-vs-exact column is only an accuracy measure when the discrete
-    // problem actually matches the manufactured solution. With Neumann data
-    // gN = 1.0 (inconsistent with uExact) it is not, so we disable it there.
-    const bool l2Meaningful = !hasNeumann;
+    // The manufactured exact solution u = sin(x)*cos(y) is a valid reference only
+    // when the assembled PDE is the flat-space Poisson equation -Lap(u) = f, for
+    // which it is the exact solution. That holds when domainDim == geoDim (planar
+    // domains and volume domains), but NOT for:
+    //   - a surface embedded in 3D (domainDim < geoDim): the assembler discretizes
+    //     the Laplace-Beltrami operator on a curved manifold, whose solution is not
+    //     sin(x)*cos(y);
+    //   - Neumann data gN = 1.0, inconsistent with that exact solution.
+    // In those cases we cannot report an accuracy error. Instead we still give a
+    // numbering-independent agreement check: the L2 distance of each method's
+    // reconstructed solution to the IETI-DP solution, taken as the reference. This
+    // shows that the methods that converge all reach the same discrete solution.
+    const bool l2Meaningful = (mp.domainDim() == mp.geoDim()) && !hasNeumann;
+
+    // For the singular (pure-Neumann) case the system was made compatible and a dof
+    // was pinned, so the converging methods now reach the same solution up to a
+    // constant. We compare modulo that constant (the pin/IETI gauges differ).
+    std::string l2Header = "L2 error";
+    bool refConverged = true;
+    if (!l2Meaningful)
+    {
+        const gsMultiPatch<>* refSol = 0;
+        for (size_t i = 0; i < results.size(); ++i)
+            if (results[i].name.compare(0, 4, "IETI") == 0)
+            { refSol = &results[i].sol; refConverged = results[i].converged; }
+
+        if (refSol)
+        {
+            l2Header = singular ? "L2 vs IETI*" : "L2 vs IETI";
+            const gsMultiPatch<> ref = singular ? removeConstant(*refSol) : *refSol;
+            for (size_t i = 0; i < results.size(); ++i)
+            {
+                const gsMultiPatch<> cur =
+                    singular ? removeConstant(results[i].sol) : results[i].sol;
+                results[i].l2err = l2FieldDistance(mp, cur, ref);
+            }
+        }
+    }
 
     gsInfo << "\n=================================== Benchmark results ===================================\n";
     gsInfo << std::left << std::setw(32) << "Method"
            << std::right << std::setw(11) << "setup [s]"
            << std::setw(11) << "solve [s]"
            << std::setw(8)  << "iters"
-           << std::setw(14) << "L2 error"
+           << std::setw(14) << l2Header
            << std::setw(11) << "converged" << "\n";
     gsInfo << "-----------------------------------------------------------------------------------------\n";
 
@@ -610,23 +854,35 @@ int main(int argc, char *argv[])
             gsInfo << std::setw(8) << "-";
         else
             gsInfo << std::setw(8) << r.iters;
-        if (l2Meaningful)
-            gsInfo << std::scientific << std::setprecision(3) << std::setw(14) << r.l2err;
-        else
-            gsInfo << std::setw(14) << "n/a";
-        gsInfo << std::setw(11) << (r.converged ? "yes" : "NO") << "\n";
+        gsInfo << std::scientific << std::setprecision(3) << std::setw(14) << r.l2err
+               << std::setw(11) << (r.converged ? "yes" : "NO") << "\n";
     }
     gsInfo << "=========================================================================================\n";
     gsInfo << "Note: IETI-DP iterations count CG steps on the Schur complement (a different operator\n"
               "      and dimension), so iteration counts are directly comparable only among the\n"
               "      global-system solvers.\n";
     if (l2Meaningful)
-        gsInfo << "      The matching L2-error column confirms that every method solved the same\n"
-                  "      discretized problem.\n";
+        gsInfo << "      The 'L2 error' column is the distance to the exact solution u = sin(x)*cos(y);\n"
+                  "      its agreement across methods confirms they solved the same discretized problem.\n";
     else
-        gsInfo << "      The L2-error column is disabled (shown as 'n/a'): with Neumann boundary\n"
-                  "      conditions the constant Neumann data is inconsistent with the manufactured\n"
-                  "      solution u = sin(x)*cos(y), so the L2 distance to it is not meaningful.\n";
+    {
+        gsInfo << "      The exact solution u = sin(x)*cos(y) is not valid here (curved surface and/or\n"
+                  "      Neumann data), so no accuracy error is reported. The '" << l2Header << "' column is the\n"
+                  "      L2 distance of each solution to the IETI-DP solution (the reference, hence 0).\n";
+        if (!singular)
+            gsInfo << "      The converged solvers sharing one common value confirms they reached the\n"
+                      "      same discrete solution.\n";
+        else
+            gsInfo << "      (*) No Dirichlet data anywhere: the global Poisson system is pure-Neumann. It\n"
+                      "      has been made well-posed -- the source was made compatible (mean(f) subtracted,\n"
+                      "      so integral(f)=0) and one dof was pinned to remove the constant null space. The\n"
+                      "      solution is then unique up to a constant, so the column is computed modulo that\n"
+                      "      constant; the converged methods agreeing (small values) confirms they reach the\n"
+                      "      same solution.\n";
+        if (!refConverged)
+            gsWarn << "      WARNING: the IETI-DP reference solver did not converge; the comparison\n"
+                      "      column may be unreliable.\n";
+    }
 
     return EXIT_SUCCESS;
 }
