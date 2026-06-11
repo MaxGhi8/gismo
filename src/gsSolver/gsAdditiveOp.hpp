@@ -22,13 +22,23 @@ void gsAdditiveOp<T>::apply(const gsMatrix<T>& input, gsMatrix<T>& x) const
     x.setZero( input.rows(), input.cols() );
 
     const index_t n = m_ops.size();
-    gsMatrix<T> res_local, corr_local;
 
-    for (index_t i=0; i<n; ++i)
+#   pragma omp parallel
     {
-        res_local.noalias() = m_transfers[i]->transpose()*input;
-        m_ops[i]->apply(res_local, corr_local);
-        x.noalias() += *(m_transfers[i])*corr_local;
+        gsMatrix<T> res_local, corr_local;
+        gsMatrix<T> x_local;
+        x_local.setZero( input.rows(), input.cols() );
+
+#       pragma omp for nowait
+        for (index_t i=0; i<n; ++i)
+        {
+            res_local.noalias() = m_transfers[i]->transpose()*input;
+            m_ops[i]->apply(res_local, corr_local);
+            x_local.noalias() += *(m_transfers[i])*corr_local;
+        }
+
+#       pragma omp critical
+        x += x_local;
     }
 }
 
