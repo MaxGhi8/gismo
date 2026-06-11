@@ -131,21 +131,28 @@ BenchResult runGlobalSolver(const std::string&             name,
                             const gsExprAssembler<>&       A,
                             const gsExprAssembler<>::space& u,
                             const gsFunctionExpr<>&        uExact,
-                            double                         setupTime)
+                            double                         setupTime,
+                            index_t                        numRun)
 {
     const real_t tol = solverOpt.getReal("Tolerance");
 
     // Identical, identically-seeded initial guess for every global solver.
-    std::srand(1);
-    gsMatrix<> x;
-    x.setRandom(K.rows(), 1);
 
-    gsMatrix<> errorHistory;
-    gsStopwatch timer;
-    SolverType(K, prec)
-        .setOptions(solverOpt)
-        .solveDetailed(F, x, errorHistory);
-    const double solveTime = timer.stop();
+    gsMatrix<> x, errorHistory;
+
+    double solveTime = 0;
+    for (index_t run = 0; run < numRun; ++run)
+    {
+        std::srand(1);
+        x.setRandom(K.rows(), 1);
+
+        gsStopwatch timer;
+        SolverType(K, prec)
+            .setOptions(solverOpt)
+            .solveDetailed(F, x, errorHistory);
+        solveTime += timer.stop();
+    }
+    solveTime /= numRun;
 
     const index_t iters    = errorHistory.rows() - 1;
     const bool    converged = (iters >= 0) && (errorHistory(iters, 0) < tol);
@@ -216,11 +223,15 @@ int main(int argc, char *argv[])
     bool    eliminateCorners = false;
     real_t  tolerance = 1.e-8;
     index_t maxIterations = 1000;
+    index_t numRun = 1;
     std::string mgSmoother("GaussSeidel");
     index_t mgLevels = -1;
+    index_t mgPreSmooth = 1;
+    index_t mgPostSmooth = 1;
+    index_t mgCycles = 1;
     std::string squareDiscr("global");
-    std::string chosenSolvers("CG,GMRES,MinRes,Multigrid");
-    std::string chosenPrecs("noprec,Jacobi,symm. Gauss-Seidel,Richardson,ILU,multigrid");
+    std::string chosenSolvers("CG,GMRES,Multigrid");
+    std::string chosenPrecs("no prec,Jacobi,symm. Gauss-Seidel,Richardson,ILU,multigrid");
 
     gsCmdLine cmd("Fair benchmark of several linear solvers on one isogeometric Poisson discretization.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);
@@ -234,9 +245,14 @@ int main(int argc, char *argv[])
     cmd.addSwitch("e", "EliminateCorners",      "IETI: eliminate corners (if they are primals)", eliminateCorners);
     cmd.addReal  ("t", "Solver.Tolerance",      "Stopping criterion for all iterative solvers", tolerance);
     cmd.addInt   ("",  "Solver.MaxIterations",  "Maximum iterations for all iterative solvers", maxIterations);
+    cmd.addInt   ("",  "num_run",               "Number of times every solve is repeated; the reported solve time is the mean over the repeats (setup is measured once)", numRun);
     cmd.addString("s", "MG.Smoother",           "Multigrid smoother (Richardson, Jacobi, GaussSeidel, IncompleteLU)", mgSmoother);
+    cmd.addInt   ("",  "MG.PreSmooth",          "Number of pre-smoothing steps", mgPreSmooth);
+    cmd.addInt   ("",  "MG.PostSmooth",         "Number of post-smoothing steps", mgPostSmooth);
+    cmd.addInt   ("",  "MG.Cycles",             "Number of cycles (1 for V-cycle, 2 for W-cycle)", mgCycles);
     cmd.addString("",  "Solvers",               "Solvers to try (comma-separated list, e.g. CG,GMRES,MinRes) or 'all'. Available: CG, MinRes, MinRes-QLP, GMRES, BiCGStab, Gradient, Multigrid", chosenSolvers);
     cmd.addString("",  "Preconditioners",       "Preconditioners to try (comma-separated list, e.g. Jacobi,ILU) or 'all'. Available: no prec, Jacobi, Gauss-Seidel, rev. Gauss-Seidel, symm. Gauss-Seidel, Richardson, ILU, multigrid", chosenPrecs);
+
 
     // Multigrid sub-options consumed by gsGridHierarchy / gsMultiGridOp.
     cmd.addInt   ("l", "MG.Levels",             "Number of multigrid levels (default: = Refinements)", mgLevels);
@@ -245,6 +261,8 @@ int main(int argc, char *argv[])
 
     // Default case is levels := refinements, so replace the invalid default.
     if (mgLevels < 0) { mgLevels = refinements; cmd.setInt("MG.Levels", mgLevels); }
+
+    if (numRun < 1) numRun = 1;
 
     if (squareDiscr != "off" && squareDiscr != "global")
     {
@@ -513,11 +531,19 @@ int main(int argc, char *argv[])
 
     gsInfo << "Solve: direct Cholesky... " << std::flush;
     {
-        timer.restart();
-        gsSparseSolver<>::SimplicialLDLT solver;
-        solver.compute(K);
-        gsMatrix<> x = solver.solve(F);
-        const double solveTime = timer.stop();
+        // Mean over numRun repeats of factorization + solve (the direct "solve"
+        // column includes the Cholesky factorization, as before).
+        gsMatrix<> x;
+        double solveTime = 0;
+        for (index_t run = 0; run < numRun; ++run)
+        {
+            timer.restart();
+            gsSparseSolver<>::SimplicialLDLT solver;
+            solver.compute(K);
+            x = solver.solve(F);
+            solveTime += timer.stop();
+        }
+        solveTime /= numRun;
 
         gsMultiPatch<> sol = reconstructGlobal(A, u, x);
         BenchResult r;
@@ -580,6 +606,10 @@ int main(int argc, char *argv[])
 
         gsMultiGridOp<>::Ptr mg = gsMultiGridOp<>::make(K, transferMatrices);
         mg->setOptions(mgOpt);
+        mg->setNumPreSmooth(mgPreSmooth);
+        mg->setNumPostSmooth(mgPostSmooth);
+        if (mg->numLevels() > 1)
+            mg->setNumCycles(mgCycles);
         mg->setCoarseSolver( makeSparseCholeskySolver(mg->matrix(0)) );
 
         for (index_t i = 1; i < mg->numLevels(); ++i)
@@ -621,7 +651,7 @@ int main(int argc, char *argv[])
         for (auto const& p : preconditioners) {
             if (!isSelected(p.name, chosenPrecs)) continue;
             results.push_back(runGlobalSolver<SType>(
-                solverName + " + " + p.name, K, F, p.op, solverOpt, mp, A, u, uExact, p.setupTime));
+                solverName + " + " + p.name, K, F, p.op, solverOpt, mp, A, u, uExact, p.setupTime, numRun));
         }
     };
 
@@ -643,7 +673,7 @@ int main(int argc, char *argv[])
         if (mg)
         {
             results.push_back(runGlobalSolver<gsGradientMethod<>>(
-                "Multigrid (standalone)", K, F, mg, solverOpt, mp, A, u, uExact, mgSetupTime));
+                "Multigrid (standalone)", K, F, mg, solverOpt, mp, A, u, uExact, mgSetupTime, numRun));
         }
     }
     gsInfo << "done.\n";
@@ -786,15 +816,23 @@ int main(int argc, char *argv[])
         gsMatrix<> rhsForSchur = ieti.rhsForSchurComplement();
         const double ietiSetup = timer.stop();
 
-        std::srand(1);
-        gsMatrix<> lambda;
-        lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
+        gsMatrix<> lambda, errorHistory;
 
-        gsMatrix<> errorHistory;
-        timer.restart();
-        gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
-        PCG.setOptions( solverOpt ).solveDetailed( rhsForSchur, lambda, errorHistory );
-        const double ietiSolve = timer.stop();
+        // Mean solve time over numRun repeats (as in runGlobalSolver): the Lagrange
+        // multiplier is reset to the same seeded vector each repeat, so the PCG on
+        // the Schur complement is deterministic and only the timing varies.
+        double ietiSolve = 0;
+        for (index_t run = 0; run < numRun; ++run)
+        {
+            std::srand(1);
+            lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
+
+            timer.restart();
+            gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
+            PCG.setOptions( solverOpt ).solveDetailed( rhsForSchur, lambda, errorHistory );
+            ietiSolve += timer.stop();
+        }
+        ietiSolve /= numRun;
 
         std::vector<gsMatrix<>> uLocal = primal.distributePrimalSolution(
             ieti.constructSolutionFromLagrangeMultipliers(lambda)
@@ -890,6 +928,9 @@ int main(int argc, char *argv[])
                << std::setw(11) << (r.converged ? "yes" : "NO") << "\n";
     }
     gsInfo << "=========================================================================================\n";
+    if (numRun > 1)
+        gsInfo << "Note: 'solve [s]' is the mean over " << numRun
+               << " repeats; 'setup [s]' is measured once.\n";
     gsInfo << "Note: IETI-DP iterations count CG steps on the Schur complement (a different operator\n"
               "      and dimension), so iteration counts are directly comparable only among the\n"
               "      global-system solvers.\n";
