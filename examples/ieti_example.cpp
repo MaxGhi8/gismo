@@ -211,13 +211,182 @@ int main(int argc, char *argv[])
         }
     }
 
+    // For IGES/CAD geometries (e.g. hummingbird) patches may have different
+    // knot structures along shared interfaces and different parametric domains.
+    // We normalize all interior knots to [0,1] before taking the union so that
+    // the correct parametric correspondence is respected.
+    if (mp.domainDim() == 2)
+    {
+        auto getKV = [&](index_t k, short_t d) -> gsKnotVector<real_t>&
+        {
+            if (auto* tb = dynamic_cast<gsTensorBSplineBasis<2,real_t>*>(&mb[k]))
+                return tb->knots(d);
+            if (auto* tn = dynamic_cast<gsTensorNurbsBasis<2,real_t>*>(&mb[k]))
+                return tn->knots(d);
+            GISMO_ERROR("makeInterfacesConforming: unsupported basis type for patch " << k);
+        };
+
+        // Normalize a knot t ∈ (lo,hi) to (0,1), optionally reflecting
+        auto toRef = [](real_t t, real_t lo, real_t hi, bool isFlip) -> real_t
+        {
+            real_t s = (t - lo) / (hi - lo);
+            return isFlip ? 1.0 - s : s;
+        };
+        // De-normalize from reference [0,1] back to [lo,hi], reflecting if needed
+        auto fromRef = [](real_t r, real_t lo, real_t hi, bool isFlip) -> real_t
+        {
+            real_t s = isFlip ? 1.0 - r : r;
+            return lo + s * (hi - lo);
+        };
+
+        typedef std::pair<index_t,short_t> PD;
+
+        // Build adjacency list: each interface gives an undirected edge (pd0, pd1, orient)
+        std::map<PD, std::vector<std::pair<PD,bool>>> adj;
+        for (const boundaryInterface& bi : mp.topology().interfaces())
+        {
+            const index_t p0 = bi.first().patch;
+            const index_t p1 = bi.second().patch;
+            const short_t d0 = 1 - bi.first().direction();
+            const short_t d1 = bi.dirMap(bi.first(), d0);
+            const bool orient = bi.dirOrientation(bi.first(), d0);
+            adj[{p0,d0}].emplace_back(PD{p1,d1}, orient);
+            adj[{p1,d1}].emplace_back(PD{p0,d0}, orient);
+        }
+
+        std::set<PD> visited;
+
+        auto processComp = [&](PD root)
+        {
+            if (visited.count(root)) return;
+            std::vector<PD> comp;
+            std::map<PD, bool> flipped; // orientation of this node relative to root
+            std::queue<PD> bfsq;
+            bfsq.push(root);
+            visited.insert(root);
+            flipped[root] = false;
+            comp.push_back(root);
+
+            while (!bfsq.empty())
+            {
+                PD cur = bfsq.front(); bfsq.pop();
+                auto it = adj.find(cur);
+                if (it == adj.end()) continue;
+                for (auto& [nbr, orient] : it->second)
+                {
+                    if (visited.count(nbr)) continue;
+                    // flipped[nbr] = flipped[cur] XOR (orientation reversed)
+                    flipped[nbr] = flipped[cur] ^ !orient;
+                    visited.insert(nbr);
+                    comp.push_back(nbr);
+                    bfsq.push(nbr);
+                }
+            }
+
+            // Handle orientation-cycle inconsistency (odd number of flips in a cycle):
+            // if a visited neighbour contradicts its flip, the union must be symmetric.
+            bool needSym = false;
+            for (auto& pd : comp)
+            {
+                auto it = adj.find(pd);
+                if (it == adj.end()) continue;
+                for (auto& [nbr, orient] : it->second)
+                    if (flipped[nbr] != (flipped[pd] ^ !orient))
+                    { needSym = true; break; }
+                if (needSym) break;
+            }
+
+            // Union of all interior knots in the normalized [0,1] reference frame
+            std::set<real_t> unionSet;
+            for (auto& pd : comp)
+            {
+                gsKnotVector<real_t>& kv = getKV(pd.first, pd.second);
+                real_t lo = kv.first(), hi = kv.last();
+                bool isFlip = flipped[pd];
+                for (auto it = kv.ubegin(); it != kv.uend(); ++it)
+                    if (*it > lo + 1e-14 && *it < hi - 1e-14)
+                        unionSet.insert(toRef(*it, lo, hi, isFlip));
+            }
+            if (needSym)
+            {
+                std::vector<real_t> extra;
+                for (real_t r : unionSet) extra.push_back(1.0 - r);
+                for (real_t r : extra) unionSet.insert(r);
+            }
+
+            // Insert missing knots into each patch in the component
+            for (auto& pd : comp)
+            {
+                gsKnotVector<real_t>& kv = getKV(pd.first, pd.second);
+                real_t lo = kv.first(), hi = kv.last();
+                bool isFlip = flipped[pd];
+
+                // Current interior knots in reference frame
+                std::set<real_t> current;
+                for (auto it = kv.ubegin(); it != kv.uend(); ++it)
+                    if (*it > lo + 1e-14 && *it < hi - 1e-14)
+                        current.insert(toRef(*it, lo, hi, isFlip));
+
+                for (real_t r : unionSet)
+                {
+                    auto it = current.lower_bound(r - 1e-10);
+                    if (it == current.end() || std::abs(*it - r) >= 1e-10)
+                        kv.insert(fromRef(r, lo, hi, isFlip));
+                }
+            }
+        };
+
+        for (auto& [pd, _] : adj) processComp(pd);
+        for (index_t k = 0; k < (index_t)mb.nBases(); ++k)
+            for (short_t d = 0; d < mp.domainDim(); ++d)
+                processComp({k, d});
+
+        // Verify and report remaining non-conforming interfaces
+        index_t nBad = 0;
+        for (const boundaryInterface& bi : mp.topology().interfaces())
+        {
+            const index_t p0 = bi.first().patch;
+            const index_t p1 = bi.second().patch;
+            const short_t d0 = 1 - bi.first().direction();
+            const short_t d1 = bi.dirMap(bi.first(), d0);
+            const index_t n0 = getKV(p0,d0).uSize() - 2;
+            const index_t n1 = getKV(p1,d1).uSize() - 2;
+            if (n0 != n1)
+            {
+                if (nBad < 3)
+                    gsWarn << "Non-conforming: patch " << p0 << " dir " << d0
+                           << " (" << n0 << ") vs patch " << p1 << " dir " << d1
+                           << " (" << n1 << ")\n";
+                ++nBad;
+            }
+        }
+        if (nBad)
+            gsWarn << nBad << " non-conforming interface(s) remain.\n";
+    }
+
     gsInfo << "done.\n";
 
-    for ( size_t i = 0; i < mb.nBases(); ++ i )
     {
-        gsInfo << "Patch " << i << ": Degree " << mb[i].degree(0);
-        for (short_t d = 1; d < mb[i].domainDim(); ++d) gsInfo << "x" << mb[i].degree(d);
-        gsInfo << ", " << mb[i].size() << " basis functions.\n";
+        const short_t dim = mb[0].domainDim();
+        bool uniform = true;
+        for (size_t k = 1; k < mb.nBases() && uniform; ++k)
+        {
+            if (mb[k].size() != mb[0].size())
+                uniform = false;
+            for (short_t d = 0; d < dim && uniform; ++d)
+                if (mb[k].degree(d) != mb[0].degree(d) ||
+                    mb[k].component(d).size() != mb[0].component(d).size())
+                    uniform = false;
+        }
+        index_t totalDofs = 0;
+        for (size_t k = 0; k < mb.nBases(); ++k) totalDofs += mb[k].size();
+
+        gsInfo << mb.nBases() << " patches"
+               << (uniform ? " (all identical)" : " (patches differ; showing patch 0)") << ".\n";
+        gsInfo << "  Patch 0: degree ";
+        for (short_t d = 0; d < dim; ++d) gsInfo << (d ? "x" : "") << mb[0].degree(d);
+        gsInfo << ", " << mb[0].size() << " basis functions.\n";
+        gsInfo << "  Total (un-glued): " << totalDofs << " dofs.\n";
     }
 
     /********* Setup assembler and assemble matrix **********/
@@ -443,35 +612,28 @@ int main(int argc, char *argv[])
     }
     //! [Primal to system]
 
-    gsInfo << "done. " << ietiMapper.nPrimalDofs() << " primal dofs.\n";
+    gsInfo << "done. " << ietiMapper.nPrimalDofs() << " primal dofs, "
+           << ieti.nLagrangeMultipliers() << " Lagrange multipliers.\n";
 
     /**************** Setup solver and solve ****************/
 
-    gsInfo << "Setup solver and solve... \n"
-        "    Setup multiplicity scaling... " << std::flush;
+    gsInfo << "Solve (CG on Schur complement)... " << std::flush;
 
-    // Tell the preconditioner to set up the scaling
     //! [Setup scaling]
     prec.setupMultiplicityScaling();
     //! [Setup scaling]
 
-    gsInfo << "done.\n    Setup rhs... " << std::flush;
-    // Compute the Schur-complement contribution for the right-hand-side
     //! [Setup rhs]
     gsMatrix<> rhsForSchur = ieti.rhsForSchurComplement();
     //! [Setup rhs]
 
-    gsInfo << "done.\n    Setup cg solver for Lagrange multipliers and solve... " << std::flush;
-    // Initial guess
     //! [Define initial guess]
     gsMatrix<> lambda;
-    lambda.setRandom( ieti.nLagrangeMultipliers(), 1 ); // !
-    // lambda.setZero( ieti.nLagrangeMultipliers(), 1 ); // !
+    lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
     //! [Define initial guess]
 
     gsMatrix<> errorHistory;
 
-    // This is the main cg iteration
     //! [Solve]
     gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
     gsStopwatch timer;
@@ -479,30 +641,26 @@ int main(int argc, char *argv[])
     const double solveTime = timer.stop();
     //! [Solve]
 
-    gsInfo << "done. Solve time: " << solveTime << " s\n"
-           << "    Reconstruct solution from Lagrange multipliers... " << std::flush;
-    // Now, we want to have the global solution for u
     //! [Recover]
     std::vector<gsMatrix<>> uLocal = primal.distributePrimalSolution(
         ieti.constructSolutionFromLagrangeMultipliers(lambda)
     );
     gsMatrix<> uGlobal = ietiMapper.constructGlobalSolutionFromLocalSolutions(uLocal);
     //! [Recover]
-    gsInfo << "done.\n\n";
+
+    gsInfo << "done (" << solveTime << " s).\n\n";
 
     /******************** Print end Exit ********************/
 
     const index_t iter = errorHistory.rows()-1;
     const bool success = errorHistory(iter,0) < tolerance;
-    if (success)
-        gsInfo << "Reached desired tolerance after " << iter << " iterations:\n";
+    gsInfo << (success ? "Converged" : "NOT converged") << " after " << iter
+           << " iterations (final residual: " << errorHistory(iter,0) << ").\n";
+    if (errorHistory.rows() <= 10)
+        gsInfo << "Residuals: " << errorHistory.transpose() << "\n\n";
     else
-        gsInfo << "Did not reach desired tolerance after " << iter << " iterations:\n";
-
-    if (errorHistory.rows() < 20)
-        gsInfo << errorHistory.transpose() << "\n\n";
-    else
-        gsInfo << errorHistory.topRows(5).transpose() << " ... " << errorHistory.bottomRows(5).transpose()  << "\n\n";
+        gsInfo << "Residuals: " << errorHistory.topRows(3).transpose()
+               << " ... " << errorHistory.bottomRows(3).transpose() << "\n\n";
 
     if (calcEigenvalues)
         gsInfo << "Estimated condition number: " << PCG.getConditionNumber() << "\n";
@@ -520,13 +678,14 @@ int main(int argc, char *argv[])
 
     if (plot)
     {
-        gsInfo << "Write Paraview data to file ieti_result.pvd\n";
         gsMultiPatch<> mpsol;
         for (index_t k=0; k<nPatches; ++k)
-            mpsol.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal[k])  ) );
-        gsWriteParaview<>( gsField<>( mp, mpsol ), "ieti_result", 1000);
-        //gsFileManager::open("ieti_result.pvd");
-        // gsWriteParaview(mp, "ieti_domain", 1000);
+            mpsol.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal[k]) ) );
+
+        gsInfo << "Write Paraview data to files ieti_geometry.pvd, ieti_source.pvd, ieti_result.pvd\n";
+        gsWriteParaview(mp, "ieti_geometry", 1000);
+        gsWriteParaview<>( gsField<>(mp, f), "ieti_source", 1000);
+        gsWriteParaview<>( gsField<>(mp, mpsol), "ieti_result", 1000);
     }
 
     if (!plot&&out.empty())
