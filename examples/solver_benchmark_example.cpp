@@ -30,6 +30,9 @@
 #include <cstdlib>
 #include <iomanip>
 #include <set>
+#include <map>
+#include <queue>
+#include <utility>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -38,6 +41,143 @@
 #include <gismo.h>
 
 using namespace gismo;
+
+// Make a 2d multi-basis interface-conforming (ported from ieti_example.cpp).
+//
+// IGES/CAD imports give patches with different knot structures along shared
+// interfaces AND different parametric domains (e.g. [0,1] vs [0,2]). The IETI
+// solver and the global dof-mapper require matching numbers of basis functions
+// on both sides of every interface (gsTensorBasis::matchWith only checks the
+// counts), which the count-equalising "global" discretization does not by itself
+// guarantee once the per-patch knot vectors differ. We build a graph whose nodes
+// are (patch, direction) pairs joined by interfaces, find connected components by
+// BFS (tracking orientation flips), normalise all interior knots to [0,1], take
+// their union, and insert the missing ones back into every patch of the component
+// (de-normalised to its own domain). This is a no-op for already-conforming XML
+// multipatches (every interface union equals each side's own knots).
+static void makeInterfacesConforming(const gsMultiPatch<>& mp, gsMultiBasis<>& mb)
+{
+    if (mp.domainDim() != 2)
+        return;
+
+    auto getKV = [&](index_t k, short_t d) -> gsKnotVector<real_t>&
+    {
+        if (auto* tb = dynamic_cast<gsTensorBSplineBasis<2,real_t>*>(&mb[k]))
+            return tb->knots(d);
+        if (auto* tn = dynamic_cast<gsTensorNurbsBasis<2,real_t>*>(&mb[k]))
+            return tn->knots(d);
+        GISMO_ERROR("makeInterfacesConforming: unsupported basis type for patch " << k);
+    };
+
+    auto toRef = [](real_t t, real_t lo, real_t hi, bool isFlip) -> real_t
+    {
+        real_t s = (t - lo) / (hi - lo);
+        return isFlip ? 1.0 - s : s;
+    };
+    auto fromRef = [](real_t r, real_t lo, real_t hi, bool isFlip) -> real_t
+    {
+        real_t s = isFlip ? 1.0 - r : r;
+        return lo + s * (hi - lo);
+    };
+
+    typedef std::pair<index_t,short_t> PD;
+
+    std::map<PD, std::vector<std::pair<PD,bool>>> adj;
+    for (const boundaryInterface& bi : mp.topology().interfaces())
+    {
+        const index_t p0 = bi.first().patch;
+        const index_t p1 = bi.second().patch;
+        const short_t d0 = 1 - bi.first().direction();
+        const short_t d1 = bi.dirMap(bi.first(), d0);
+        const bool orient = bi.dirOrientation(bi.first(), d0);
+        adj[{p0,d0}].emplace_back(PD{p1,d1}, orient);
+        adj[{p1,d1}].emplace_back(PD{p0,d0}, orient);
+    }
+
+    std::set<PD> visited;
+
+    auto processComp = [&](PD root)
+    {
+        if (visited.count(root)) return;
+        std::vector<PD> comp;
+        std::map<PD, bool> flipped;
+        std::queue<PD> bfsq;
+        bfsq.push(root);
+        visited.insert(root);
+        flipped[root] = false;
+        comp.push_back(root);
+
+        while (!bfsq.empty())
+        {
+            PD cur = bfsq.front(); bfsq.pop();
+            auto it = adj.find(cur);
+            if (it == adj.end()) continue;
+            for (auto& nb : it->second)
+            {
+                const PD& nbr = nb.first; const bool orient = nb.second;
+                if (visited.count(nbr)) continue;
+                flipped[nbr] = flipped[cur] ^ !orient;
+                visited.insert(nbr);
+                comp.push_back(nbr);
+                bfsq.push(nbr);
+            }
+        }
+
+        // Orientation-cycle inconsistency (odd number of flips in a cycle):
+        // if a visited neighbour contradicts its flip, symmetrise the union.
+        bool needSym = false;
+        for (auto& pd : comp)
+        {
+            auto it = adj.find(pd);
+            if (it == adj.end()) continue;
+            for (auto& nb : it->second)
+                if (flipped[nb.first] != (flipped[pd] ^ !nb.second))
+                { needSym = true; break; }
+            if (needSym) break;
+        }
+
+        std::set<real_t> unionSet;
+        for (auto& pd : comp)
+        {
+            gsKnotVector<real_t>& kv = getKV(pd.first, pd.second);
+            real_t lo = kv.first(), hi = kv.last();
+            bool isFlip = flipped[pd];
+            for (auto it = kv.ubegin(); it != kv.uend(); ++it)
+                if (*it > lo + 1e-14 && *it < hi - 1e-14)
+                    unionSet.insert(toRef(*it, lo, hi, isFlip));
+        }
+        if (needSym)
+        {
+            std::vector<real_t> extra;
+            for (real_t r : unionSet) extra.push_back(1.0 - r);
+            for (real_t r : extra) unionSet.insert(r);
+        }
+
+        for (auto& pd : comp)
+        {
+            gsKnotVector<real_t>& kv = getKV(pd.first, pd.second);
+            real_t lo = kv.first(), hi = kv.last();
+            bool isFlip = flipped[pd];
+
+            std::set<real_t> current;
+            for (auto it = kv.ubegin(); it != kv.uend(); ++it)
+                if (*it > lo + 1e-14 && *it < hi - 1e-14)
+                    current.insert(toRef(*it, lo, hi, isFlip));
+
+            for (real_t r : unionSet)
+            {
+                auto it = current.lower_bound(r - 1e-10);
+                if (it == current.end() || std::abs(*it - r) >= 1e-10)
+                    kv.insert(fromRef(r, lo, hi, isFlip));
+            }
+        }
+    };
+
+    for (auto& kv : adj) processComp(kv.first);
+    for (index_t k = 0; k < (index_t)mb.nBases(); ++k)
+        for (short_t d = 0; d < mp.domainDim(); ++d)
+            processComp({k, d});
+}
 
 // Helper tag to pass types to the benchmark loop lambda.
 template<typename T> struct solver_tag { typedef T type; };
@@ -224,14 +364,15 @@ int main(int argc, char *argv[])
     real_t  tolerance = 1.e-8;
     index_t maxIterations = 1000;
     index_t numRun = 1;
+    bool    plot   = false;
     std::string mgSmoother("GaussSeidel");
     index_t mgLevels = -1;
     index_t mgPreSmooth = 1;
     index_t mgPostSmooth = 1;
     index_t mgCycles = 1;
     std::string squareDiscr("global");
-    std::string chosenSolvers("CG,GMRES,Multigrid");
-    std::string chosenPrecs("no prec,Jacobi,symm. Gauss-Seidel,Richardson,ILU,multigrid");
+    std::string chosenSolvers("Multigrid");
+    std::string chosenPrecs("no prec");
 
     gsCmdLine cmd("Fair benchmark of several linear solvers on one isogeometric Poisson discretization.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);
@@ -252,7 +393,7 @@ int main(int argc, char *argv[])
     cmd.addInt   ("",  "MG.Cycles",             "Number of cycles (1 for V-cycle, 2 for W-cycle)", mgCycles);
     cmd.addString("",  "Solvers",               "Solvers to try (comma-separated list, e.g. CG,GMRES,MinRes) or 'all'. Available: CG, MinRes, MinRes-QLP, GMRES, BiCGStab, Gradient, Multigrid", chosenSolvers);
     cmd.addString("",  "Preconditioners",       "Preconditioners to try (comma-separated list, e.g. Jacobi,ILU) or 'all'. Available: no prec, Jacobi, Gauss-Seidel, rev. Gauss-Seidel, symm. Gauss-Seidel, Richardson, ILU, multigrid", chosenPrecs);
-
+    cmd.addSwitch(     "plot",                  "Write geometry, source and solution to Paraview files", plot);
 
     // Multigrid sub-options consumed by gsGridHierarchy / gsMultiGridOp.
     cmd.addInt   ("l", "MG.Levels",             "Number of multigrid levels (default: = Refinements)", mgLevels);
@@ -297,14 +438,22 @@ int main(int argc, char *argv[])
     }
     gsMultiPatch<>& mp = *mpPtr;
 
-    // Domains stored as XML carry their topology (interfaces + boundary) in the
-    // file, but CAD formats like IGES/STEP do not: the patches arrive as a bag of
-    // surfaces with no connectivity. Without topology, mp has no registered
-    // boundary sides, so no Dirichlet conditions get assigned below and the global
-    // Poisson system becomes pure-Neumann / singular -- its "solution" is then an
-    // arbitrary null-space vector (~1e+14). Recover the topology by geometric
-    // matching when the file did not provide it: matching sides become interfaces
-    // (gluing the patches), unmatched sides become boundary (and get Dirichlet).
+    // Ensure a usable topology BEFORE splitting. Domains stored as XML carry their
+    // interfaces + boundary in the file, so mp.nInterfaces() > 0. CAD formats like
+    // IGES/STEP instead arrive as a bag of surfaces with no connectivity: NO
+    // interfaces are registered and every patch side is left as a boundary (so
+    // nBoundary() is large, NOT zero -- checking nBoundary()==0 is the wrong test
+    // and silently leaves a CAD import unglued, which makes IETI fail because its
+    // skeleton/scaling matrices are then empty). Recover the topology by geometric
+    // matching whenever no interface is registered: matching sides become interfaces
+    // (gluing the patches), unmatched sides become boundary. On a closed surface
+    // (e.g. the hummingbird) this correctly yields zero boundary -> pure Neumann.
+    if (mp.nInterfaces() == 0)
+    {
+        gsInfo << "(no interfaces registered, computing topology) " << std::flush;
+        mp.computeTopology();
+    }
+
     for (index_t i=0; i<splitPatches; ++i)
     {
         gsInfo << "split patches uniformly... " << std::flush;
@@ -316,21 +465,6 @@ int main(int argc, char *argv[])
         gsInfo << "and stretch it... " << std::flush;
         for (size_t i=0; i!=mp.nPatches(); ++i)
             const_cast<gsGeometry<>&>(mp[i]).scale(stretchGeometry,0);
-    }
-
-    // Ensure a usable topology. Domains stored as XML carry interfaces + boundary
-    // in the file; CAD formats like IGES/STEP arrive as a bag of surfaces with no
-    // connectivity, and uniformSplit() on such an input drops the boundary sides
-    // (it registers the new internal interfaces but leaves nBoundary == 0). With no
-    // boundary there are no Dirichlet conditions, so the global Poisson system is
-    // pure-Neumann / singular and its "solution" is an arbitrary null-space vector
-    // (~1e+14). Recompute the topology by geometric matching whenever no boundary
-    // side is registered: matching sides become interfaces (gluing patches),
-    // unmatched sides become boundary (and thus receive Dirichlet data).
-    if (mp.nBoundary() == 0)
-    {
-        gsInfo << "(no boundary registered, computing topology) " << std::flush;
-        mp.computeTopology();
     }
 
     gsInfo << "done.\n";
@@ -404,6 +538,12 @@ int main(int argc, char *argv[])
     // mb is the assembled (finest) basis; --SquareDiscretization controls the
     // per-direction element equalisation (see makeBenchBasis).
     gsMultiBasis<> mb = makeBenchBasis(mp, degree, refinements, squareDiscr);
+
+    // Equalising element counts is not enough on a CAD import: patches glued along
+    // an interface can still carry different knot vectors (different interior knots
+    // or parametric domains), which makes the dof-mapper / IETI matchWith fail with
+    // "sizes do not match". Take the union of interface knots so both sides agree.
+    makeInterfacesConforming(mp, mb);
 
     gsInfo << "done.\n";
 
@@ -956,6 +1096,39 @@ int main(int argc, char *argv[])
             gsWarn << "      WARNING: the IETI-DP reference solver did not converge; the comparison\n"
                       "      column may be unreliable.\n";
     }
+
+    if (plot)
+    {
+        // Pick the direct solver solution as the representative field; fall back to
+        // the first converged iterative result if the direct solver was not run.
+        const gsMultiPatch<>* plotSol = nullptr;
+        for (size_t i = 0; i < results.size(); ++i)
+            if (results[i].name.find("Direct") != std::string::npos)
+            { plotSol = &results[i].sol; break; }
+        if (!plotSol)
+            for (size_t i = 0; i < results.size(); ++i)
+                if (results[i].converged)
+                { plotSol = &results[i].sol; break; }
+
+        if (plotSol)
+        {
+            // For the singular (pure-Neumann) case the solution is only defined up
+            // to an additive constant; the direct solver pinned an arbitrary gauge.
+            // Normalize to zero mean so the plotted field shows the meaningful
+            // non-constant part (matches ieti_example.cpp).
+            const gsMultiPatch<> resultSol =
+                singular ? removeConstant(*plotSol) : *plotSol;
+
+            gsInfo << "Write Paraview data to benchmark_geometry.pvd, benchmark_source.pvd, benchmark_result.pvd\n";
+            gsWriteParaview(mp, "benchmark_geometry", 1000);
+            gsWriteParaview<>( gsField<>(mp, f), "benchmark_source", 1000 );
+            gsWriteParaview<>( gsField<>(mp, resultSol), "benchmark_result", 1000 );
+        }
+        else
+            gsWarn << "No converged solution available to plot.\n";
+    }
+    else
+        gsInfo << "No output created, re-run with --plot to get Paraview files.\n";
 
     return EXIT_SUCCESS;
 }

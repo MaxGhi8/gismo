@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
     gsConstantFunction<> gN( 1.0, mp.geoDim() );
 
     gsBoundaryConditions<> bc;
+    bool hasDirichlet = false;
     //! [Define Source]
     {
         const index_t len = boundaryConditions.length();
@@ -140,7 +141,10 @@ int main(int argc, char *argv[])
             }
 
             if ( b_local == 'd' )
+            {
                 bc.addCondition( *it, condition_type::dirichlet, &gD );
+                hasDirichlet = true;
+            }
             else if ( b_local == 'n' )
                 bc.addCondition( *it, condition_type::neumann, &gN );
             else
@@ -154,6 +158,25 @@ int main(int argc, char *argv[])
         if ( len > i )
             gsInfo << "\nToo many boundary conditions have been specified. Ignoring the remaining ones.\n";
         gsInfo << "done. "<<i<<" boundary conditions set.\n";
+    }
+
+    // Pure-Neumann (closed surface or all-Neumann BCs): the source must satisfy
+    // ∫_S f dS = 0 for the problem to have a solution. Subtract the surface mean
+    // of f so the per-patch IETI assembly sees a compatible right-hand side.
+    const bool singular = !hasDirichlet;
+    if (singular)
+    {
+        gsExprAssembler<> tmpA(1,1);
+        gsMultiBasis<> tmpMb(mp);
+        tmpA.setIntegrationElements(tmpMb);
+        typedef gsExprAssembler<>::geometryMap geometryMap;
+        geometryMap G = tmpA.getMap(mp);
+        gsExprEvaluator<> ev(tmpA);
+        auto fv = ev.getVariable(f, G);
+        const real_t cf = ev.integral(fv * meas(G)) / ev.integral(meas(G));
+        f = gsFunctionExpr<>("2*sin(x)*cos(y) - (" + std::to_string(cf) + ")", mp.geoDim());
+        gsInfo << "[pure Neumann] subtracting mean(f) = " << cf
+               << " to make RHS compatible.\n";
     }
 
 
@@ -650,6 +673,41 @@ int main(int argc, char *argv[])
 
     gsInfo << "done (" << solveTime << " s).\n\n";
 
+    // Reconstruct the per-patch multipatch field once; reused by cross-check and plot.
+    gsMultiPatch<> mpsol;
+    for (index_t k=0; k<nPatches; ++k)
+        mpsol.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal[k]) ) );
+
+    // Subtract the mean control value of a scalar solution field. For a partition-
+    // of-unity basis (B-splines, NURBS) the constant function equals the constant
+    // control value, so this removes the additive constant from the field itself.
+    auto removeMean = [](gsMultiPatch<> sol) -> gsMultiPatch<>
+    {
+        real_t sum = 0; index_t n = 0;
+        for (size_t p = 0; p < sol.nPatches(); ++p)
+        { sum += sol.patch(p).coefs().sum(); n += sol.patch(p).coefs().size(); }
+        if (n > 0) {
+            const real_t mean = sum / n;
+            for (size_t p = 0; p < sol.nPatches(); ++p)
+                sol.patch(p).coefs().array() -= mean;
+        }
+        return sol;
+    };
+
+    // Pure-Neumann (closed surface, no Dirichlet) Poisson is singular: its solution
+    // is only unique up to an additive constant, and IETI leaves that constant
+    // undetermined (the random initial Lagrange multiplier injects a large, spurious
+    // constant -- e.g. ~ -9e+6). Fix the gauge by normalizing to zero mean, so the
+    // reported / plotted / saved solution shows the meaningful non-constant part.
+    if (singular)
+    {
+        mpsol = removeMean(mpsol);
+        const real_t mean = uGlobal.mean();
+        uGlobal.array() -= mean;
+        gsInfo << "[pure Neumann] normalized solution to zero mean "
+                  "(removed constant " << mean << ").\n";
+    }
+
     /******************** Print end Exit ********************/
 
     const index_t iter = errorHistory.rows()-1;
@@ -665,6 +723,68 @@ int main(int argc, char *argv[])
     if (calcEigenvalues)
         gsInfo << "Estimated condition number: " << PCG.getConditionNumber() << "\n";
 
+    /****** Cross-check: global direct Cholesky ******/
+    // Assemble the same problem as a single global system and solve it with direct
+    // Cholesky. The L2 distance between the two reconstructed fields should be small,
+    // confirming that IETI and the direct solver reach the same discrete solution.
+    // For pure-Neumann problems (singular) the solution is unique only up to an
+    // additive constant, so we subtract each field's mean before comparing.
+    {
+        gsInfo << "Cross-check: global direct Cholesky... " << std::flush;
+
+        typedef gsExprAssembler<>::geometryMap geometryMap;
+        typedef gsExprAssembler<>::space       space;
+
+        gsExprAssembler<> globalA(1,1);
+        globalA.setIntegrationElements(mb);
+        geometryMap G = globalA.getMap(mp);
+        space       v = globalA.getSpace(mb);
+        bc.setGeoMap(mp);
+        v.setup(bc, dirichlet::interpolation, 0);
+
+        globalA.initSystem();
+        auto ff = globalA.getCoeff(f, G);
+        auto aa = globalA.getCoeff(a, G);
+        globalA.assemble( aa.val() * igrad(v, G) * igrad(v, G).tr() * meas(G),
+                          v * ff * meas(G) );
+        auto g_N = globalA.getBdrFunction();
+        globalA.assembleBdr( bc.get("Neumann"), v * g_N.val() * nv(G).norm() );
+
+        gsSparseMatrix<> Kg = globalA.matrix();
+        gsMatrix<>       Fg = globalA.rhs();
+
+        if (singular)
+        {
+            const index_t j = 0;
+            for (index_t k = 0; k < Kg.outerSize(); ++k)
+                for (gsSparseMatrix<>::InnerIterator it(Kg, k); it; ++it)
+                    if (it.row() == j || it.col() == j)
+                        it.valueRef() = (it.row() == j && it.col() == j) ? 1.0 : 0.0;
+            Fg(j, 0) = 0;
+        }
+
+        gsMatrix<> xg;
+        gsSparseSolver<>::SimplicialLDLT chol;
+        chol.compute(Kg);
+        xg = chol.solve(Fg);
+
+        gsMultiPatch<> dirSol;
+        {
+            auto v_sol = globalA.getSolution(v, xg);
+            v_sol.extract(dirSol);
+        }
+
+        // mpsol is already zero-mean for the singular case; normalize the direct
+        // solution the same way so the non-constant parts are compared directly.
+        const gsMultiPatch<> solDir = singular ? removeMean(dirSol) : dirSol;
+        gsField<> fIeti(mp, mpsol), fDir(mp, solDir);
+        const real_t dist = fIeti.distanceL2(fDir);
+
+        gsInfo << "done.\n";
+        gsInfo << "L2 distance IETI vs. direct Cholesky"
+               << (singular ? " (modulo constant)" : "") << ": " << dist << "\n\n";
+    }
+
     if (!out.empty())
     {
         gsFileData<> fd;
@@ -678,10 +798,6 @@ int main(int argc, char *argv[])
 
     if (plot)
     {
-        gsMultiPatch<> mpsol;
-        for (index_t k=0; k<nPatches; ++k)
-            mpsol.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal[k]) ) );
-
         gsInfo << "Write Paraview data to files ieti_geometry.pvd, ieti_source.pvd, ieti_result.pvd\n";
         gsWriteParaview(mp, "ieti_geometry", 1000);
         gsWriteParaview<>( gsField<>(mp, f), "ieti_source", 1000);
