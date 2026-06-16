@@ -84,6 +84,7 @@ int main(int argc, char *argv[])
     }
     //! [Define Geometry2]
     gsMultiPatch<>& mp = *mpPtr;
+    mp.computeTopology();
 
     for (index_t i=0; i<splitPatches; ++i)
     {
@@ -292,6 +293,11 @@ int main(int argc, char *argv[])
         primal.setEliminatePointwiseConstraints(true);
     //! [Setup]
 
+    // Per-patch assembled data (filled in parallel, consumed in serial order)
+    std::vector<gsSparseMatrix<real_t, RowMajor>> jumpMatrices(nPatches);
+    std::vector<gsSparseMatrix<>>                 localMatrices(nPatches);
+    std::vector<gsMatrix<>>                       localRhss(nPatches);
+
     //! [Assemble]
 #ifdef _OPENMP
 #pragma omp parallel for
@@ -350,64 +356,69 @@ int main(int argc, char *argv[])
         variable g_N = assembler.getBdrFunction();
         assembler.assembleBdr(bc_local.get("Neumann"),  u * g_N.val() * nv(G).norm() );
 
-        // Fetch data
-        gsSparseMatrix<real_t, RowMajor> jumpMatrix  = ietiMapper.jumpMatrix(k);
-        gsSparseMatrix<>                 localMatrix = assembler.matrix();
-        gsMatrix<>                       localRhs    = assembler.rhs();
-        //! [Assemble]
+        // Store assembled data indexed by physical patch k (not thread order)
+        jumpMatrices[k]  = ietiMapper.jumpMatrix(k);
+        localMatrices[k] = assembler.matrix();
+        localRhss[k]     = assembler.rhs();
+    }
+    //! [Assemble]
 
-#ifdef _OPENMP
-#pragma omp critical
-#endif
-        {
-            // Add the patch to the scaled Dirichlet preconditioner
-            //! [Patch to preconditioner]
-            prec.addSubdomain(
-                gsScaledDirichletPrec<>::restrictToSkeleton(
-                    jumpMatrix,
-                    localMatrix,
-                    ietiMapper.skeletonDofs(k)
-                )
-            );
-            //! [Patch to preconditioner]
+    // Add patches to prec/primal/ieti in sequential order k=0..nPatches-1 so
+    // that constructSolutionFromLagrangeMultipliers returns results indexed by
+    // physical patch (required by constructGlobalSolutionFromLocalSolutions).
+    for (index_t k=0; k<nPatches; ++k)
+    {
+        gsSparseMatrix<real_t, RowMajor>& jumpMatrix  = jumpMatrices[k];
+        gsSparseMatrix<>&                 localMatrix = localMatrices[k];
+        gsMatrix<>&                       localRhs    = localRhss[k];
 
-            // This function writes back to jumpMatrix, localMatrix, and localRhs,
-            // so it must be called after prec.addSubdomain().
-            //! [Patch to primals]
-            auto const & pConstraints = ietiMapper.primalConstraints(k);
-            auto const & pDofIndices  = ietiMapper.primalDofIndices(k);
-
-            std::vector<gsSparseVector<real_t>> uniqueConstraints;
-            std::vector<index_t> uniqueDofIndices;
-            std::set<index_t> seen;
-            for (size_t i = 0; i < pDofIndices.size(); ++i)
-            {
-                if (seen.find(pDofIndices[i]) == seen.end())
-                {
-                    uniqueConstraints.push_back(pConstraints[i]);
-                    uniqueDofIndices.push_back(pDofIndices[i]);
-                    seen.insert(pDofIndices[i]);
-                }
-            }
-
-            primal.handleConstraints(
-                uniqueConstraints,
-                uniqueDofIndices,
+        // Add the patch to the scaled Dirichlet preconditioner
+        //! [Patch to preconditioner]
+        prec.addSubdomain(
+            gsScaledDirichletPrec<>::restrictToSkeleton(
                 jumpMatrix,
                 localMatrix,
-                localRhs
-            );
-            //! [Patch to primals]
+                ietiMapper.skeletonDofs(k)
+            )
+        );
+        //! [Patch to preconditioner]
 
-            // Add the patch to the Ieti system
-            //! [Patch to system]
-            ieti.addSubdomain(
-                jumpMatrix.moveToPtr(),
-                makeMatrixOp(localMatrix.moveToPtr()),
-                give(localRhs)
-            );
-            //! [Patch to system]
+        // This function writes back to jumpMatrix, localMatrix, and localRhs,
+        // so it must be called after prec.addSubdomain().
+        //! [Patch to primals]
+        auto const & pConstraints = ietiMapper.primalConstraints(k);
+        auto const & pDofIndices  = ietiMapper.primalDofIndices(k);
+
+        std::vector<gsSparseVector<real_t>> uniqueConstraints;
+        std::vector<index_t> uniqueDofIndices;
+        std::set<index_t> seen;
+        for (size_t i = 0; i < pDofIndices.size(); ++i)
+        {
+            if (seen.find(pDofIndices[i]) == seen.end())
+            {
+                uniqueConstraints.push_back(pConstraints[i]);
+                uniqueDofIndices.push_back(pDofIndices[i]);
+                seen.insert(pDofIndices[i]);
+            }
         }
+
+        primal.handleConstraints(
+            uniqueConstraints,
+            uniqueDofIndices,
+            jumpMatrix,
+            localMatrix,
+            localRhs
+        );
+        //! [Patch to primals]
+
+        // Add the patch to the Ieti system
+        //! [Patch to system]
+        ieti.addSubdomain(
+            jumpMatrix.moveToPtr(),
+            makeMatrixOp(localMatrix.moveToPtr()),
+            give(localRhs)
+        );
+        //! [Patch to system]
     //! [End of assembling loop]
     } // end for
     //! [End of assembling loop]
