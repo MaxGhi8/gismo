@@ -14,6 +14,7 @@
 % algorithms
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\algdef{SE}[PARFOR]{ParFor}{EndParFor}[1]{\textbf{parfor} $#1$ \textbf{do}}{\textbf{end parfor}}
 % bibliography
 \usepackage{authblk}
 \usepackage{csquotes}
@@ -70,7 +71,7 @@
 \newcommand{\Rnurbs}[2]{\widehat{R}_{#1,#2}}     % NURBS (rational) basis
 
 % Function spaces
-\newcommand{\Shat}[1]{\widehat{\mathcal{S}}_{#1}} % reference spline space (uni- or multivariate)
+\newcommand{\Shat}[1]{\widehat{\mathcal{V}}_{#1}} % reference spline space (uni- or multivariate)
 \newcommand{\Vglo}{\mathcal{V}_h}                  % global conforming IGA space
 \newcommand{\Vloc}[1]{\mathcal{V}_{#1}}            % local patch IGA space
 \newcommand{\Vprod}{\mathcal{V}_h^{\Pi}}           % product (broken) space
@@ -290,20 +291,13 @@ space $\Vprod := \prod_{k=1}^{\npatch}
 \end{equation}
 with $i, j = 1, \dots, n_k$ and $k=1, \ldots, \npatch$, where $\{\Bloc{k}{i}\}_{i=1}^{n_k}$ is the basis of
 $\Vloc{k}$. Thus $\Aloc{k} \in \R^{n_k \times n_k}$ are SPD matrices
- and $\uloc{k} \in \R^{n_k}$ represents $u_k = \sum_i
-(\uloc{k})_i \Bloc{k}{i}$. Continuity is imposed weakly:\mg{sistemare questa frase} full
-matching pairs each interface basis function of $\patchdom{k}$ with one of $\patchdom{l}$,
-and each pair (local indices $i$ on $k$, $j$ on $l$) contributes one Lagrange
-multiplier $\lagmult \in \R^{\Lambda}$ enforcing $(\uloc{k})_i - (\uloc{l})_j = 0$. The resulting signed
-Boolean \emph{jump matrices} $\Jloc{k} \in \R^{\Lambda \times n_k}$,
-$\Jfull := (\Jloc{1}, \dots, \Jloc{\npatch})$, satisfy
-\begin{equation}
-    \sum_{k=1}^{\npatch} \Jloc{k} \uloc{k} = \vect{0},
-    \label{eq:jump-constraint}
-\end{equation}
-and a tuple is continuous (lies in $\Vglo$) iff it belongs to $\ker \Jfull$.
+and $\uloc{k} \in \R^{n_k}$ represents $u_k = \sum_i (\uloc{k})_i \Bloc{k}{i}$.
+Continuity across patch interfaces is enforced via Lagrange multipliers
+$\lagmult \in \R^{\Lambda}$. Introducing the signed Boolean \emph{jump matrices}
+$\Jloc{k} \in \R^{\Lambda \times n_k}$ and $\Jfull := (\Jloc{1}, \dots, \Jloc{\npatch})$,
+the continuity constraint can be written as $\sum_{k=1}^{\npatch} \Jloc{k} \uloc{k} = \vect{0}$.
 Minimizing the broken energy $\sum_k (\tfrac12 \uloc{k}^{\top} \Aloc{k} \uloc{k} -
-\floc{k}^{\top} \uloc{k})$ subject to~\eqref{eq:jump-constraint}, with
+\floc{k}^{\top} \uloc{k})$ subject to the continuity constraint, with
 multiplier $\lagmult \in \R^{\Lambda}$, gives the saddle-point system
 \begin{equation}
     \begin{pmatrix}
@@ -363,29 +357,28 @@ recovered from $\lagmult$ solving the coarse global problem \eqref{eq:augmented-
 and the addressing the local problems in parallel.
 
 \paragraph{Scaled Dirichlet preconditioner.}
-As $\Lambda$ is large and~\eqref{eq:ieti-schur} ill-conditioned, CG uses the
-scaled Dirichlet preconditioner~\cite{kleiss2012ieti, pechstein2013finite}
+The system~\eqref{eq:ieti-schur} is large and ill-conditioned, so CG is
+preconditioned by the scaled Dirichlet preconditioner~\cite{kleiss2012ieti,
+pechstein2013finite}
 \begin{equation}
     \Psd = \sum_{k=1}^{\npatch}
-    \Jskel{k}\, \Dmult{k}^{-1}\, \Sloc{k}\, \Dmult{k}^{-1}\, \Jskel{k}^{\top},
+    \Jskel{k}\, \Dmult{k}^{-1}\, \Sloc{k}\, \Dmult{k}^{-1}\, \Jskel{k}^{\top}.
     \label{eq:scaled-dirichlet}
 \end{equation}
-where $\Jskel{k}$ restricts $\Jloc{k}$ to the skeleton dofs $\skel_k$ (interfaces
-and boundary, complementary to the interior $I_k$), $\Dmult{k}$ is the multiplicity
-scaling $(\Dmult{k})_{jj} = 1/\mathrm{mult}(j)$ ($\mathrm{mult}(j)$ being the number of
-patches sharing dof $j$), and $\Sloc{k}$ is the local Dirichlet Schur complement of
-$\Aloc{k}$ onto the skeleton, i.e.\ with $\Aloc{k}$ partitioned into interior/skeleton
-blocks $A^{(k)}_{II}, A^{(k)}_{I\skel}, A^{(k)}_{\skel\skel}$,\mg{periodo troppo lungo}
+Here $\Jskel{k}$ is the restriction of $\Jloc{k}$ to the skeleton dofs $\skel_k$
+(interfaces and Neumann boundary, complementary to the interior $I_k$).
+The diagonal matrix $\Dmult{k}$ is the multiplicity scaling, with
+$(\Dmult{k})_{jj} = 1/\mathrm{mult}(j)$ where $\mathrm{mult}(j)$ counts the
+number of patches sharing dof $j$.
+Finally, $\Sloc{k}$ is the local Dirichlet Schur complement of $\Aloc{k}$ onto
+the skeleton. Partitioning $\Aloc{k}$ into interior and skeleton blocks,
 \begin{equation}
     \Sloc{k} = A^{(k)}_{\skel\skel}
         - A^{(k)}_{\skel I}\, \bigl(A^{(k)}_{II}\bigr)^{-1}\, A^{(k)}_{I\skel}
     \ \in\ \R^{|\skel_k| \times |\skel_k|}.
     \label{eq:local-schur}
 \end{equation}
-This yields the quasi-optimal bound $\kappa(\Psd \Fschur) \le C\,(1 +
-\log(H/h))^2$, with $H, h$ the subdomain and mesh sizes~\cite{kleiss2012ieti,
-pechstein2013finite}. The overall method is summarized in
-Algorithm~\ref{alg:ieti-dp}. \mg{Check result}
+The overall method is summarized in Algorithm~\ref{alg:ieti-dp}.
 
 \begin{algorithm}[t]
 \caption{IETI-DP solver for the model problem~\eqref{eq:poisson-strong}.}
@@ -394,38 +387,39 @@ Algorithm~\ref{alg:ieti-dp}. \mg{Check result}
 \Require multipatch $\{\patchdom{k}\}_{k=1}^{\npatch}$, data $(\alpha, f, g_D, g_N)$,
          choice of primal degrees of freedom
 \Ensure  discrete continuous approximated solution $u_h \in \Vglo$
-\Statex \textbf{Assembly} \Comment{local and parallel over patches}
-\For{$k = 1, \dots, \npatch$}
+\vspace{0.2cm}
+\Statex \textbf{Assembly} 
+\ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
     \State assemble local stiffness $\Aloc{k}$ and load $\floc{k}$
            \Comment{Eq.~\eqref{eq:local-stiffness}}
     \State form jump matrix $\Jloc{k}$ and primal constraints $\Cloc{k}$
     \State build augmented blocks $\Aaug{k}, \Jaug{k},
            \faug{k}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
-\EndFor
+\EndParFor
 \State assemble the coarse blocks $\Aaug{\npatch+1},
        \Jaug{\npatch+1}, \faug{\npatch+1}$ for the primal dof,
         \Comment{Eq.~\eqref{eq:augmented-blocks}}
-\Statex \textbf{Interface (dual) problem}
+\vspace{0.2cm}
+\Statex \textbf{Interface dual problem}
 \State $\gschur \gets \sum_{k=1}^{\npatch+1} \Jaug{k}
-       \Aaug{k}^{-1} \faug{k}$
-\State solve $\Fschur \lagmult = \gschur$ by preconditioned CG
-\Statex \textbf{Reconstruction} \Comment{coarse local solve + local and parallel over patches}
-\For{$k = 1, \dots, \npatch+1$}
+       \Aaug{k}^{-1} \faug{k}$ \Comment{Eq.~\eqref{eq:ieti-schur}}
+\State solve $\Fschur \lagmult = \gschur$ by preconditioned CG, where $\Fschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1} \Jaug{k}^{\top}$
+\vspace{0.2cm}
+\Statex \textbf{Reconstruction}
+\State solve the primal problem:
+       $\uaug{\npatch+1} \gets \Aaug{\npatch+1}^{-1}
+       (\faug{\npatch+1} - \Jaug{\npatch+1}^{\top} \lagmult)$ \Comment{global coarse problem}
+\ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
     \State $\uaug{k} \gets \Aaug{k}^{-1}
            (\faug{k} - \Jaug{k}^{\top} \lagmult)$
-           \Comment{$k = \npatch+1$: coarse solve}
-\EndFor
-\State distribute the primal solution $\uaug{\npatch+1}$ to the
-       patches, obtaining the continuous local solutions $\uloc{k}$,
-       $k = 1, \dots, \npatch$
-\State assemble $u_h \in \Vglo$ from $\{\uloc{k}\}_{k=1}^{\npatch}$
+\EndParFor
+\State assemble $u_h \in \Vglo$ from $\{\uaug{k}\}_{k=1}^{\npatch}$
 \State \Return $u_h$
 \end{algorithmic}
-\end{algorithm}\mg{Dividere K+1 dagli altri e esplicitare che e' parallelo}
+\end{algorithm}
 
-\begin{rmk}[Cost of the local Schur complements] \label{rmk:schur-cost}
-Each CG application we evaluate~\eqref{eq:scaled-dirichlet}, which by~\eqref{eq:local-schur}
-require one solve with the interior block $A^{(k)}_{II}$, that is a Dirichlet problem in
+\begin{rmk}[] \label{rmk:schur-cost}
+Each preconditioned CG iteration requires solving for every patch a Dirichlet problem in
 the patch interior degree of freedoms. These local solves dominate the per-iteration cost of the
 IETI-DP solver.
 \end{rmk}
@@ -568,6 +562,7 @@ faster) and $0.39\,$s for standalone multigrid ($7.8\times$ faster).
         \toprule
         Method &  solve [s] & iters & converged \\
         \midrule
+        \textbf{Direct Cholesky}               &  \textbf{0.04} & -    & yes \\
         GMRES (no preconditioner)       &  5.23 & 224  & yes \\
         GMRES + Jacobi                  &  3.66 & 192  & yes \\
         GMRES + symmetric Gauss--Seidel &  0.93 & 80   & yes \\
@@ -579,7 +574,8 @@ faster) and $0.39\,$s for standalone multigrid ($7.8\times$ faster).
         CG + ILU               &  2.01 & 1000   & no \\
         CG + multigrid               &  0.31 & 28   & yes \\
         Multigrid (standalone)       &  0.39 & 35   & yes \\
-        \textbf{IETI-DP}             &  \textbf{0.05} & 22 & yes \\
+        IETI-DP (no preconditioner)             &  0.10 & 57 & yes \\
+        \textbf{IETI-DP}              &  \textbf{0.05} & 22 & yes \\
         \bottomrule
     \end{tabular}
 \end{table}
