@@ -992,6 +992,41 @@ int main(int argc, char *argv[])
         r.sol = give(sol);
         results.push_back(r);
 
+        // Unpreconditioned variant: same Schur complement, identity preconditioner.
+        {
+            gsMatrix<> lambda2, errorHistory2;
+            double ietiSolve2 = 0;
+            for (index_t run = 0; run < numRun; ++run)
+            {
+                std::srand(1);
+                lambda2.setRandom( ieti.nLagrangeMultipliers(), 1 );
+
+                timer.restart();
+                gsConjugateGradient<> CG( ieti.schurComplement(),
+                    gsIdentityOp<>::make(ieti.nLagrangeMultipliers()) );
+                CG.setOptions( solverOpt ).solveDetailed( rhsForSchur, lambda2, errorHistory2 );
+                ietiSolve2 += timer.stop();
+            }
+            ietiSolve2 /= numRun;
+
+            std::vector<gsMatrix<>> uLocal2 = primal.distributePrimalSolution(
+                ieti.constructSolutionFromLagrangeMultipliers(lambda2)
+            );
+
+            gsMultiPatch<> sol2;
+            for (index_t k = 0; k < nPatches; ++k)
+                sol2.addPatch( mb[k].makeGeometry( ietiMapper.incorporateFixedPart(k, uLocal2[k]) ) );
+
+            const index_t iters2     = errorHistory2.rows() - 1;
+            const bool    converged2 = errorHistory2(iters2, 0) < tolerance;
+            BenchResult r2;
+            r2.name = "IETI-DP (CG, no prec)"; r2.iters = iters2; r2.setupTime = ietiSetup;
+            r2.solveTime = ietiSolve2; r2.l2err = l2ErrorVsExact(mp, sol2, uExact);
+            r2.converged = converged2;
+            r2.sol = give(sol2);
+            results.push_back(r2);
+        }
+
         // IETI does NOT solve the coupled global system; it solves a CG on the Schur
         // complement of the Lagrange multipliers plus a primal coarse problem and one
         // local solve per patch. Report those sizes so the 'iters' column is read in
@@ -1029,7 +1064,7 @@ int main(int argc, char *argv[])
         const gsMultiPatch<>* refSol = 0;
         for (size_t i = 0; i < results.size(); ++i)
             if (results[i].name.compare(0, 4, "IETI") == 0)
-            { refSol = &results[i].sol; refConverged = results[i].converged; }
+            { refSol = &results[i].sol; refConverged = results[i].converged; break; }
 
         if (refSol)
         {
