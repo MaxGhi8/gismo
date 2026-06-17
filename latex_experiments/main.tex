@@ -635,37 +635,6 @@ replacing each interior solve (Remark~\ref{rmk:schur-cost}) with a single forwar
 pass.
 
 
-\subsection{A harder regime: the hummingbird} \label{subsec:bench-hummingbird}
-
-The winner of the IETI-DP/multigrid comparison depends on the subdomain
-structure, and the closed hummingbird surface illustrates the opposite regime.
-With the default single split it is decomposed into $1248$ small patches, giving
-$N = 101090$ coupled degrees of freedom and an interface problem with
-$\Lambda = 19968$ Lagrange multipliers; being closed, it carries no Dirichlet
-boundary, so the problem is pure Neumann and is regularized as in
-Section~\ref{subsec:model}. Here multigrid converges in a single iteration and
-solves in $0.18\,$s, whereas IETI-DP needs $45$ interface iterations and
-$22.2\,$s: with that many tiny subdomains the interface problem and the
-$1248$ per-iteration local solves make IETI-DP far more expensive
-(Table~\ref{tab:regimes}). This confirms that IETI-DP is the method of choice in
-the few-large-subdomains regime adopted for the reference case, which is the
-setting we target with the neural preconditioner.
-
-\begin{table}[t]
-    \centering
-    \caption{The two regimes. Few large subdomains (teapot) favour IETI-DP; many
-    small subdomains (hummingbird) favour multigrid. Solve time [s] with
-    iteration count in parentheses.}
-    \label{tab:regimes}
-    \begin{tabular}{lrrrcc}
-        \toprule
-        Case & patches & $N$ & $\Lambda$ & CG+multigrid & IETI-DP \\
-        \midrule
-        Teapot ($p=2$, $r=3$)      & 32   & 2502   & 512   & 0.31 (28) & \textbf{0.045 (22)} \\
-        Hummingbird (default)      & 1248 & 101090 & 19968 & \textbf{0.18 (1)} & 22.2 (45) \\
-        \bottomrule
-    \end{tabular}
-\end{table}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Bibliography (Harvard notation)
