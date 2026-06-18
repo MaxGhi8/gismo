@@ -1,0 +1,731 @@
+{
+  "reference": {
+    "geometry": "/home/max/Desktop/DK/projects/gismo/filedata/domain2d/yeti_mp2.xml",
+    "splitpatches": 0,
+    "degree": 2,
+    "refinements": 2
+  },
+  "sweeps": {
+    "refinement": [
+      {
+        "dofs": 1536,
+        "npatches": 21,
+        "asm_time": 0.00609398,
+        "ieti_lagrange": 192,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0034,
+            "solve": 0.002,
+            "iters": null,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0034,
+            "solve": 0.0011,
+            "iters": 61,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0034,
+            "solve": 0.0015,
+            "iters": 49,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0034,
+            "solve": 0.0053,
+            "iters": 22,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0055,
+            "solve": 0.0001,
+            "iters": 1,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0055,
+            "solve": 0.0001,
+            "iters": 1,
+            "l2": 0.000214,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0142,
+            "solve": 0.0004,
+            "iters": 12,
+            "l2": 0.000214,
+            "converged": true
+          }
+        },
+        "wall": 0.1,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 1,
+        "timed_out": false
+      },
+      {
+        "dofs": 5760,
+        "npatches": 21,
+        "asm_time": 0.0200946,
+        "ieti_lagrange": 384,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0092,
+            "solve": 0.0093,
+            "iters": null,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0092,
+            "solve": 0.0077,
+            "iters": 118,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0092,
+            "solve": 0.0083,
+            "iters": 91,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0092,
+            "solve": 0.0251,
+            "iters": 35,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0136,
+            "solve": 0.0109,
+            "iters": 11,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0136,
+            "solve": 0.0158,
+            "iters": 16,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0654,
+            "solve": 0.002,
+            "iters": 14,
+            "l2": 2.033e-05,
+            "converged": true
+          }
+        },
+        "wall": 0.2,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 22272,
+        "npatches": 21,
+        "asm_time": 0.0346994,
+        "ieti_lagrange": 768,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0347,
+            "solve": 0.0608,
+            "iters": null,
+            "l2": 2.069e-06,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0347,
+            "solve": 0.059,
+            "iters": 229,
+            "l2": 2.071e-06,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0347,
+            "solve": 0.0569,
+            "iters": 169,
+            "l2": 2.072e-06,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0347,
+            "solve": 0.1625,
+            "iters": 58,
+            "l2": 2.071e-06,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0516,
+            "solve": 0.0564,
+            "iters": 12,
+            "l2": 2.069e-06,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0516,
+            "solve": 0.0788,
+            "iters": 17,
+            "l2": 2.069e-06,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.3404,
+            "solve": 0.0122,
+            "iters": 16,
+            "l2": 2.069e-06,
+            "converged": true
+          }
+        },
+        "wall": 1.0,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 3,
+        "timed_out": false
+      },
+      {
+        "dofs": 87552,
+        "npatches": 21,
+        "asm_time": 0.131476,
+        "ieti_lagrange": 1536,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.1315,
+            "solve": 0.4642,
+            "iters": null,
+            "l2": 2.258e-07,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.1315,
+            "solve": 0.4722,
+            "iters": 446,
+            "l2": 2.986e-07,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.1315,
+            "solve": 0.4521,
+            "iters": 319,
+            "l2": 2.993e-07,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.1315,
+            "solve": 4.8828,
+            "iters": 104,
+            "l2": 2.723e-07,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.2075,
+            "solve": 0.7105,
+            "iters": 13,
+            "l2": 2.258e-07,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.2075,
+            "solve": 0.991,
+            "iters": 18,
+            "l2": 2.26e-07,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 2.4651,
+            "solve": 0.1118,
+            "iters": 17,
+            "l2": 2.258e-07,
+            "converged": true
+          }
+        },
+        "wall": 12.5,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 4,
+        "timed_out": false
+      }
+    ],
+    "degree": [
+      {
+        "dofs": 5085,
+        "npatches": 21,
+        "asm_time": 0.00469446,
+        "ieti_lagrange": 360,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0045,
+            "solve": 0.0044,
+            "iters": null,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0045,
+            "solve": 0.0049,
+            "iters": 180,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0045,
+            "solve": 0.0067,
+            "iters": 134,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0045,
+            "solve": 0.0124,
+            "iters": 43,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0064,
+            "solve": 0.0051,
+            "iters": 13,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0064,
+            "solve": 0.0074,
+            "iters": 20,
+            "l2": 0.001011,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0258,
+            "solve": 0.0011,
+            "iters": 13,
+            "l2": 0.001011,
+            "converged": true
+          }
+        },
+        "wall": 0.1,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 1,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 5760,
+        "npatches": 21,
+        "asm_time": 0.00917411,
+        "ieti_lagrange": 384,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0091,
+            "solve": 0.0094,
+            "iters": null,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0091,
+            "solve": 0.0077,
+            "iters": 118,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0091,
+            "solve": 0.0083,
+            "iters": 90,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0091,
+            "solve": 0.0251,
+            "iters": 35,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0137,
+            "solve": 0.0108,
+            "iters": 11,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0137,
+            "solve": 0.0158,
+            "iters": 16,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.063,
+            "solve": 0.002,
+            "iters": 14,
+            "l2": 2.033e-05,
+            "converged": true
+          }
+        },
+        "wall": 0.2,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 6477,
+        "npatches": 21,
+        "asm_time": 0.0210767,
+        "ieti_lagrange": 408,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0211,
+            "solve": 0.0197,
+            "iters": null,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0211,
+            "solve": 0.016,
+            "iters": 129,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0211,
+            "solve": 0.0138,
+            "iters": 87,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0211,
+            "solve": 0.0538,
+            "iters": 38,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0289,
+            "solve": 0.0293,
+            "iters": 15,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0289,
+            "solve": 0.0506,
+            "iters": 26,
+            "l2": 0.0001209,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.1173,
+            "solve": 0.0029,
+            "iters": 15,
+            "l2": 0.0001209,
+            "converged": true
+          }
+        },
+        "wall": 0.4,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 3,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 7236,
+        "npatches": 21,
+        "asm_time": 0.0548351,
+        "ieti_lagrange": 432,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0445,
+            "solve": 0.0341,
+            "iters": null,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0445,
+            "solve": 0.049,
+            "iters": 235,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0445,
+            "solve": 0.0295,
+            "iters": 118,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0445,
+            "solve": 0.1157,
+            "iters": 44,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0617,
+            "solve": 0.1063,
+            "iters": 29,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0617,
+            "solve": 0.289,
+            "iters": 79,
+            "l2": 4.639e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.2113,
+            "solve": 0.004,
+            "iters": 16,
+            "l2": 4.639e-05,
+            "converged": true
+          }
+        },
+        "wall": 1.1,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 4,
+        "refinements": 2,
+        "timed_out": false
+      }
+    ],
+    "splitpatches": [
+      {
+        "dofs": 5760,
+        "npatches": 21,
+        "asm_time": 0.00944543,
+        "ieti_lagrange": 384,
+        "ieti_primal": 0,
+        "ieti_solves": 21,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0091,
+            "solve": 0.0094,
+            "iters": null,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0091,
+            "solve": 0.0076,
+            "iters": 118,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0091,
+            "solve": 0.0083,
+            "iters": 91,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0091,
+            "solve": 0.0249,
+            "iters": 35,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0135,
+            "solve": 0.0113,
+            "iters": 11,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0135,
+            "solve": 0.0158,
+            "iters": 16,
+            "l2": 2.033e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0638,
+            "solve": 0.0019,
+            "iters": 14,
+            "l2": 2.033e-05,
+            "converged": true
+          }
+        },
+        "wall": 0.2,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 6477,
+        "npatches": 84,
+        "asm_time": 0.00993085,
+        "ieti_lagrange": 1056,
+        "ieti_primal": 45,
+        "ieti_solves": 84,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0097,
+            "solve": 0.0086,
+            "iters": null,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0097,
+            "solve": 0.0119,
+            "iters": 172,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0097,
+            "solve": 0.011,
+            "iters": 110,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0097,
+            "solve": 0.034,
+            "iters": 45,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0149,
+            "solve": 0.0169,
+            "iters": 16,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0149,
+            "solve": 0.0286,
+            "iters": 27,
+            "l2": 1.906e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0562,
+            "solve": 0.0029,
+            "iters": 19,
+            "l2": 1.906e-05,
+            "converged": true
+          }
+        },
+        "wall": 0.2,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 1,
+        "degree": 2,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 8037,
+        "npatches": 336,
+        "asm_time": 0.0115364,
+        "ieti_lagrange": 2400,
+        "ieti_primal": 261,
+        "ieti_solves": 336,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0114,
+            "solve": 0.0089,
+            "iters": null,
+            "l2": 1.248e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0114,
+            "solve": 0.0158,
+            "iters": 196,
+            "l2": 1.248e-05,
+            "converged": true
+          },
+          "CG + Jacobi": {
+            "setup": 0.0114,
+            "solve": 0.0148,
+            "iters": 126,
+            "l2": 1.249e-05,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0114,
+            "solve": 0.0482,
+            "iters": 55,
+            "l2": 1.248e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0192,
+            "solve": 0.0203,
+            "iters": 16,
+            "l2": 1.248e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0192,
+            "solve": 0.0263,
+            "iters": 21,
+            "l2": 1.248e-05,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0929,
+            "solve": 0.0128,
+            "iters": 21,
+            "l2": 1.248e-05,
+            "converged": true
+          }
+        },
+        "wall": 0.4,
+        "geometry": "yeti_mp2.xml",
+        "splitpatches": 2,
+        "degree": 2,
+        "refinements": 2,
+        "timed_out": false
+      }
+    ]
+  }
+}

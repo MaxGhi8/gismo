@@ -28,19 +28,21 @@ Paths
 -----
 By default the script assumes it lives in the G+Smo ``examples/`` directory, so
 the compiled binary is at ``../build/bin/solver_benchmark_example`` and the
-geometries are at ``../filedata/surfaces``. Override with the environment
-variables ``GISMO_BUILD`` (build directory) and ``GISMO_FILEDATA`` (filedata
-directory) if your layout differs.
+geometries are under ``../filedata/``. Override with the environment variables
+``GISMO_BUILD`` (build directory) and ``GISMO_FILEDATA`` (filedata root directory)
+if your layout differs.
 
 Usage
 -----
-    python3 run_experiments.py run     # run the binary over all configs -> results.json
-    python3 run_experiments.py plot    # (re)generate figures/ from results.json
-    python3 run_experiments.py all     # run then plot   (default)
+    python3 run_experiments.py [--domain teapot|yeti] run     # run binary -> results_{domain}.json
+    python3 run_experiments.py [--domain teapot|yeti] plot    # generate figures from results_{domain}.json
+    python3 run_experiments.py [--domain teapot|yeti] all     # run then plot (default)
 
-Re-running ``run`` overwrites results.json; ``plot`` only needs the JSON.
+Default domain is ``teapot`` for backward compatibility.
+Re-running ``run`` overwrites results_{domain}.json; ``plot`` only needs the JSON.
 """
 
+import argparse
 import json
 import os
 import re
@@ -53,12 +55,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 BUILD = os.environ.get("GISMO_BUILD", os.path.join(ROOT, "build"))
 BIN = os.path.join(BUILD, "bin", "solver_benchmark_example")
-GEOM_DIR = os.environ.get("GISMO_FILEDATA", os.path.join(ROOT, "filedata", "surfaces"))
-TEAPOT = os.path.join(GEOM_DIR, "teapot.xml")
-HUMMINGBIRD = os.path.join(GEOM_DIR, "hummingbird_nurbs_only_v2.igs")
+FILEDATA = os.environ.get("GISMO_FILEDATA", os.path.join(ROOT, "filedata"))
 
-# Outputs are written next to this script.
-RESULTS_JSON = os.path.join(HERE, "results.json")
+TEAPOT      = os.path.join(FILEDATA, "surfaces", "teapot.xml")
+YETI        = os.path.join(FILEDATA, "domain2d", "yeti_mp2.xml")
+HUMMINGBIRD = os.path.join(FILEDATA, "surfaces", "hummingbird_nurbs_only_v2.igs")
+
 FIG_DIR = os.path.join(ROOT, "latex_experiments", "figures")
 
 # Restrict the global-system solvers to the multigrid baseline (CG + multigrid).
@@ -66,10 +68,34 @@ FIG_DIR = os.path.join(ROOT, "latex_experiments", "figures")
 COMMON_ARGS = ["--Solvers", "CG,Multigrid", "--Preconditioners", "no prec,Jacobi,symm. Gauss-Seidel,multigrid"]
 
 # ---------------------------------------------------------------------------
-# The reference case: few large subdomains + a non-trivial local mesh, where
-# IETI-DP clearly beats CG+multigrid in solve time (see module docstring).
+# Domain configurations
 # ---------------------------------------------------------------------------
-REFERENCE = dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=3)
+DOMAINS = {
+    "teapot": dict(
+        geometry=TEAPOT,
+        reference=dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=3),
+        plan=dict(
+            refinement=[dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4)],
+            degree    =[dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4)],
+            splitpatches=[dict(geometry=TEAPOT, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
+        ),
+        results_json=os.path.join(HERE, "results_teapot.json"),
+        fig_prefix="",
+        title="Teapot",
+    ),
+    "yeti": dict(
+        geometry=YETI,
+        reference=dict(geometry=YETI, splitpatches=0, degree=2, refinements=2),
+        plan=dict(
+            refinement=[dict(geometry=YETI, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4)],
+            degree    =[dict(geometry=YETI, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4)],
+            splitpatches=[dict(geometry=YETI, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
+        ),
+        results_json=os.path.join(HERE, "results_yeti.json"),
+        fig_prefix="yeti_",
+        title="Yeti",
+    ),
+}
 
 # ---------------------------------------------------------------------------
 # Parsing
@@ -173,31 +199,16 @@ def run_one(geometry, splitpatches, degree, refinements, timeout=600, extra=None
 
 
 # ---------------------------------------------------------------------------
-# Experiment plan (all on the teapot reference geometry)
+# Collect
 # ---------------------------------------------------------------------------
-def experiment_plan():
-    plan = {}
-    # Sweep 1: mesh resolution per patch (uniform refinement), few large patches.
-    plan["refinement"] = [dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r)
-                          for r in (1, 2, 3, 4)]
-    # Sweep 2: local polynomial degree.
-    plan["degree"] = [dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2)
-                      for p in (1, 2, 3, 4)]
-    # Sweep 3: number of subdomains.
-    plan["splitpatches"] = [dict(geometry=TEAPOT, splitpatches=sp, degree=2, refinements=2)
-                            for sp in (0, 1, 2)]
-    return plan
-
-
-def collect():
-    plan = experiment_plan()
-    results = {"reference": REFERENCE, "sweeps": {}}
-    for name, configs in plan.items():
+def collect(cfg):
+    results = {"reference": cfg["reference"], "sweeps": {}}
+    for name, configs in cfg["plan"].items():
         print(f"[sweep: {name}]", flush=True)
         results["sweeps"][name] = [run_one(**c) for c in configs]
-    with open(RESULTS_JSON, "w") as f:
+    with open(cfg["results_json"], "w") as f:
         json.dump(results, f, indent=2)
-    print(f"\nwrote {RESULTS_JSON}")
+    print(f"\nwrote {cfg['results_json']}")
 
 
 # ---------------------------------------------------------------------------
@@ -216,21 +227,21 @@ def _series(records, xkey, method):
     return xs, solve, total
 
 
-def plot():
+def plot(cfg):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     os.makedirs(FIG_DIR, exist_ok=True)
-    with open(RESULTS_JSON) as f:
+    with open(cfg["results_json"]) as f:
         results = json.load(f)
 
     METHODS = [
-        ("IETI-DP (CG on Schur)", "o-",  "#c0392b", "IETI-DP"),
-        ("CG + multigrid",        "s--", "#2c3e50", "CG + Multigrid"),
-        ("CG + no prec",          "v:",  "#7f8c8d", "CG (no prec)"),
-        ("CG + Jacobi",           "d:",  "#2980b9", "CG + Jacobi"),
-        ("CG + symm. Gauss-Seidel", "^:", "#8e44ad", "CG + GS sym"),
+        ("IETI-DP (CG on Schur)",   "o-",  "#c0392b", "IETI-DP"),
+        ("CG + multigrid",          "s--", "#2c3e50", "CG + Multigrid"),
+        ("CG + no prec",            "v:",  "#7f8c8d", "CG (no prec)"),
+        ("CG + Jacobi",             "d:",  "#2980b9", "CG + Jacobi"),
+        ("CG + symm. Gauss-Seidel", "^:",  "#8e44ad", "CG + GS sym"),
         ("Multigrid (standalone)",  "p-.", "#27ae60", "Multigrid alone"),
     ]
 
@@ -242,36 +253,32 @@ def plot():
 
     for sweep, (xkey, xlabel) in sweep_meta.items():
         recs = results["sweeps"][sweep]
-        
+
         fig, ax = plt.subplots(figsize=(7, 5))
 
         for method_name, style, color, label in METHODS:
             xs, solve, total = _series(recs, xkey, method_name)
             if not xs:
                 continue
-            
             ax.plot(xs, solve, style, color=color, label=label)
 
-        # solve time
         ax.set_yscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel("solve time [s]")
         ax.set_title("Solve time")
         ax.grid(True, which="both", ls=":", alpha=0.5)
-        ax.legend(fontsize='small')
+        ax.legend(fontsize="small")
 
-        # integer ticks
         xs_all = set()
         for method_name, _, _, _ in METHODS:
             xs, _, _ = _series(recs, xkey, method_name)
             xs_all.update(xs)
-        
         if xs_all:
             ax.set_xticks(sorted(xs_all))
 
-        fig.suptitle(f"Teapot: Solver Comparison, sweep over {sweep}")
+        fig.suptitle(f"{cfg['title']}: Solver Comparison, sweep over {sweep}")
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-        path = os.path.join(FIG_DIR, f"time_vs_{sweep}.pdf")
+        path = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}time_vs_{sweep}.pdf")
         fig.savefig(path)
         fig.savefig(path.replace(".pdf", ".png"), dpi=140)
         plt.close(fig)
@@ -281,8 +288,20 @@ def plot():
 
 
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "all"
-    if cmd in ("run", "all"):
-        collect()
-    if cmd in ("plot", "all"):
-        plot()
+    parser = argparse.ArgumentParser(
+        description="Run and/or plot IETI-DP vs multigrid sweep experiments."
+    )
+    parser.add_argument(
+        "--domain", choices=list(DOMAINS), default="teapot",
+        help="geometry domain to use (default: teapot)",
+    )
+    parser.add_argument(
+        "cmd", nargs="?", default="all", choices=["run", "plot", "all"],
+        help="run: execute binary; plot: generate figures; all: both (default)",
+    )
+    args = parser.parse_args()
+    cfg = DOMAINS[args.domain]
+    if args.cmd in ("run", "all"):
+        collect(cfg)
+    if args.cmd in ("plot", "all"):
+        plot(cfg)
