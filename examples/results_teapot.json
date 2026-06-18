@@ -10,62 +10,62 @@
       {
         "dofs": 258,
         "npatches": 32,
-        "asm_time": 0.00105548,
+        "asm_time": 0.211688,
         "ieti_lagrange": 128,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.001,
+            "setup": 0.2089,
             "solve": 0.0002,
             "iters": null,
             "l2": 0.1954,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.001,
+            "setup": 0.2089,
             "solve": 0.0003,
             "iters": 93,
             "l2": 0.1954,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.001,
-            "solve": 0.0004,
+            "setup": 0.2089,
+            "solve": 0.0003,
             "iters": 79,
             "l2": 0.1954,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.001,
+            "setup": 0.2089,
             "solve": 0.0014,
             "iters": 39,
             "l2": 0.1954,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0012,
+            "setup": 0.2091,
             "solve": 0.0,
             "iters": 1,
             "l2": 0.1954,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0012,
+            "setup": 0.2091,
             "solve": 0.0,
             "iters": 1,
             "l2": 0.1954,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0039,
+            "setup": 0.0075,
             "solve": 0.0002,
             "iters": 15,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.0,
+        "wall": 0.6,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
@@ -75,62 +75,62 @@
       {
         "dofs": 750,
         "npatches": 32,
-        "asm_time": 0.00188375,
+        "asm_time": 0.213242,
         "ieti_lagrange": 256,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0019,
+            "setup": 0.2092,
             "solve": 0.0008,
             "iters": null,
             "l2": 0.05003,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0019,
-            "solve": 0.0017,
+            "setup": 0.2092,
+            "solve": 0.0014,
             "iters": 175,
             "l2": 0.05003,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0019,
-            "solve": 0.0019,
+            "setup": 0.2092,
+            "solve": 0.0018,
             "iters": 126,
             "l2": 0.05003,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0019,
-            "solve": 0.0066,
+            "setup": 0.2092,
+            "solve": 0.0061,
             "iters": 61,
             "l2": 0.05003,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0028,
-            "solve": 0.0033,
+            "setup": 0.2101,
+            "solve": 0.0028,
             "iters": 23,
             "l2": 0.05003,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0028,
-            "solve": 0.0042,
+            "setup": 0.2101,
+            "solve": 0.0036,
             "iters": 30,
             "l2": 0.05003,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0079,
-            "solve": 0.0004,
+            "setup": 0.2128,
+            "solve": 0.0023,
             "iters": 19,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.0,
+        "wall": 1.6,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
@@ -140,62 +140,62 @@
       {
         "dofs": 2502,
         "npatches": 32,
-        "asm_time": 0.00478125,
+        "asm_time": 0.214379,
         "ieti_lagrange": 512,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0048,
-            "solve": 0.0042,
+            "setup": 0.2097,
+            "solve": 0.0037,
             "iters": null,
             "l2": 0.008834,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0048,
-            "solve": 0.0111,
-            "iters": 341,
+            "setup": 0.2097,
+            "solve": 0.0093,
+            "iters": 347,
             "l2": 0.008834,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0048,
-            "solve": 0.0099,
+            "setup": 0.2097,
+            "solve": 0.0086,
             "iters": 207,
             "l2": 0.008834,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0048,
-            "solve": 0.0327,
+            "setup": 0.2097,
+            "solve": 0.0273,
             "iters": 90,
             "l2": 0.008834,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0073,
-            "solve": 0.015,
+            "setup": 0.212,
+            "solve": 0.0127,
             "iters": 28,
             "l2": 0.008834,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0073,
-            "solve": 0.0186,
+            "setup": 0.212,
+            "solve": 0.0159,
             "iters": 35,
             "l2": 0.008834,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.027,
-            "solve": 0.0013,
+            "setup": 0.1507,
+            "solve": 0.0035,
             "iters": 22,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.2,
+        "wall": 0.8,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
@@ -205,66 +205,196 @@
       {
         "dofs": 9078,
         "npatches": 32,
-        "asm_time": 0.0155621,
+        "asm_time": 0.202914,
         "ieti_lagrange": 1024,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0149,
-            "solve": 0.0172,
+            "setup": 0.2029,
+            "solve": 0.0175,
             "iters": null,
             "l2": 0.001342,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0149,
-            "solve": 0.1041,
+            "setup": 0.2029,
+            "solve": 0.1045,
             "iters": 1000,
             "l2": 0.001342,
             "converged": false
           },
           "CG + Jacobi": {
-            "setup": 0.0149,
-            "solve": 0.0527,
+            "setup": 0.2029,
+            "solve": 0.0531,
             "iters": 381,
             "l2": 0.001342,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0149,
-            "solve": 0.1609,
+            "setup": 0.2029,
+            "solve": 0.1621,
             "iters": 144,
             "l2": 0.001342,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0217,
-            "solve": 0.0754,
+            "setup": 0.2109,
+            "solve": 0.2216,
             "iters": 38,
             "l2": 0.001342,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0217,
-            "solve": 2.0003,
+            "setup": 0.2109,
+            "solve": 4.6872,
             "iters": 1000,
             "l2": 0.04849,
             "converged": false
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0979,
-            "solve": 0.005,
+            "setup": 0.4868,
+            "solve": 0.0097,
             "iters": 26,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 2.7,
+        "wall": 7.3,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
         "refinements": 4,
+        "timed_out": false
+      },
+      {
+        "dofs": 34518,
+        "npatches": 32,
+        "asm_time": 0.281042,
+        "ieti_lagrange": 2048,
+        "ieti_primal": 22,
+        "ieti_solves": 32,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.2211,
+            "solve": 0.1151,
+            "iters": null,
+            "l2": 0.0001899,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.2211,
+            "solve": 0.4047,
+            "iters": 1000,
+            "l2": 0.0352,
+            "converged": false
+          },
+          "CG + Jacobi": {
+            "setup": 0.2211,
+            "solve": 0.3774,
+            "iters": 724,
+            "l2": 0.0001899,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.2211,
+            "solve": 1.1497,
+            "iters": 244,
+            "l2": 0.0001899,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.2485,
+            "solve": 1.1475,
+            "iters": 65,
+            "l2": 0.0001899,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.2485,
+            "solve": 17.2631,
+            "iters": 1000,
+            "l2": 0.01243,
+            "converged": false
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 1.2761,
+            "solve": 0.1592,
+            "iters": 32,
+            "l2": 0.0,
+            "converged": true
+          }
+        },
+        "wall": 23.3,
+        "geometry": "teapot.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 5,
+        "timed_out": false
+      },
+      {
+        "dofs": 134550,
+        "npatches": 32,
+        "asm_time": 0.395474,
+        "ieti_lagrange": 4096,
+        "ieti_primal": 22,
+        "ieti_solves": 32,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.3955,
+            "solve": 0.9064,
+            "iters": null,
+            "l2": 2.587e-05,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.3955,
+            "solve": 1.7698,
+            "iters": 1000,
+            "l2": 1.977,
+            "converged": false
+          },
+          "CG + Jacobi": {
+            "setup": 0.3955,
+            "solve": 2.6443,
+            "iters": 1000,
+            "l2": 0.0002804,
+            "converged": false
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.3955,
+            "solve": 13.2174,
+            "iters": 439,
+            "l2": 2.585e-05,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.5099,
+            "solve": 5.7623,
+            "iters": 117,
+            "l2": 2.587e-05,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.5099,
+            "solve": 45.7827,
+            "iters": 1000,
+            "l2": 0.007731,
+            "converged": false
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 4.9082,
+            "solve": 0.6976,
+            "iters": 38,
+            "l2": 0.0,
+            "converged": true
+          }
+        },
+        "wall": 78.5,
+        "geometry": "teapot.xml",
+        "splitpatches": 0,
+        "degree": 2,
+        "refinements": 6,
         "timed_out": false
       }
     ],
@@ -272,62 +402,62 @@
       {
         "dofs": 472,
         "npatches": 32,
-        "asm_time": 0.00106168,
+        "asm_time": 0.35856,
         "ieti_lagrange": 192,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.001,
+            "setup": 0.3339,
             "solve": 0.0003,
             "iters": null,
             "l2": 0.06848,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.001,
+            "setup": 0.3339,
             "solve": 0.0005,
             "iters": 164,
             "l2": 0.06848,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.001,
+            "setup": 0.3339,
             "solve": 0.0006,
-            "iters": 113,
+            "iters": 112,
             "l2": 0.06848,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.001,
-            "solve": 0.0014,
+            "setup": 0.3339,
+            "solve": 0.0015,
             "iters": 49,
             "l2": 0.06848,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0014,
+            "setup": 0.3343,
             "solve": 0.0007,
             "iters": 19,
             "l2": 0.06848,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0014,
+            "setup": 0.3343,
             "solve": 0.0009,
             "iters": 24,
             "l2": 0.06848,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0042,
-            "solve": 0.0002,
+            "setup": 1.2918,
+            "solve": 0.247,
             "iters": 16,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.0,
+        "wall": 2.2,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 1,
@@ -337,62 +467,62 @@
       {
         "dofs": 750,
         "npatches": 32,
-        "asm_time": 0.00170374,
+        "asm_time": 0.439648,
         "ieti_lagrange": 256,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0017,
+            "setup": 0.2129,
             "solve": 0.0007,
             "iters": null,
             "l2": 0.05003,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0017,
+            "setup": 0.2129,
             "solve": 0.0014,
-            "iters": 176,
+            "iters": 175,
             "l2": 0.05003,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0017,
+            "setup": 0.2129,
             "solve": 0.0016,
             "iters": 126,
             "l2": 0.05003,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0017,
-            "solve": 0.0055,
+            "setup": 0.2129,
+            "solve": 0.0056,
             "iters": 61,
             "l2": 0.05003,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0025,
+            "setup": 0.2137,
             "solve": 0.0027,
             "iters": 23,
             "l2": 0.05003,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0025,
-            "solve": 0.0034,
+            "setup": 0.2137,
+            "solve": 0.0035,
             "iters": 30,
             "l2": 0.05003,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0066,
+            "setup": 0.3206,
             "solve": 0.0004,
             "iters": 19,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.0,
+        "wall": 1.1,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
@@ -402,62 +532,62 @@
       {
         "dofs": 1092,
         "npatches": 32,
-        "asm_time": 0.00331903,
+        "asm_time": 0.0439122,
         "ieti_lagrange": 320,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0031,
-            "solve": 0.0017,
+            "setup": 0.0084,
+            "solve": 0.0019,
             "iters": null,
             "l2": 0.02602,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0031,
-            "solve": 0.0044,
-            "iters": 254,
+            "setup": 0.0084,
+            "solve": 0.0043,
+            "iters": 253,
             "l2": 0.02602,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0031,
-            "solve": 0.0043,
+            "setup": 0.0084,
+            "solve": 0.0044,
             "iters": 173,
             "l2": 0.02602,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0031,
-            "solve": 0.016,
+            "setup": 0.0084,
+            "solve": 0.0162,
             "iters": 77,
             "l2": 0.02602,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0047,
-            "solve": 0.0081,
+            "setup": 0.0102,
+            "solve": 0.0085,
             "iters": 32,
             "l2": 0.02602,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0047,
-            "solve": 0.0111,
+            "setup": 0.0102,
+            "solve": 0.0115,
             "iters": 45,
             "l2": 0.02602,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0106,
+            "setup": 0.0172,
             "solve": 0.0006,
             "iters": 21,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.1,
+        "wall": 0.2,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 3,
@@ -467,56 +597,56 @@
       {
         "dofs": 1498,
         "npatches": 32,
-        "asm_time": 0.0069797,
+        "asm_time": 0.00663018,
         "ieti_lagrange": 384,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.006,
-            "solve": 0.003,
+            "setup": 0.0066,
+            "solve": 0.0031,
             "iters": null,
             "l2": 0.01425,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.006,
-            "solve": 0.0166,
-            "iters": 494,
+            "setup": 0.0066,
+            "solve": 0.0168,
+            "iters": 493,
             "l2": 0.01425,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.006,
-            "solve": 0.0102,
+            "setup": 0.0066,
+            "solve": 0.0108,
             "iters": 236,
             "l2": 0.01425,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.006,
-            "solve": 0.0352,
+            "setup": 0.0066,
+            "solve": 0.0365,
             "iters": 91,
             "l2": 0.01425,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0083,
-            "solve": 0.0202,
+            "setup": 0.0099,
+            "solve": 0.0209,
             "iters": 44,
             "l2": 0.01425,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0083,
-            "solve": 0.0384,
+            "setup": 0.0099,
+            "solve": 0.0394,
             "iters": 85,
             "l2": 0.01425,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0175,
-            "solve": 0.0009,
+            "setup": 0.0294,
+            "solve": 0.001,
             "iters": 23,
             "l2": 0.0,
             "converged": true
@@ -528,41 +658,171 @@
         "degree": 4,
         "refinements": 2,
         "timed_out": false
+      },
+      {
+        "dofs": 1968,
+        "npatches": 32,
+        "asm_time": 0.0120308,
+        "ieti_lagrange": 448,
+        "ieti_primal": 22,
+        "ieti_solves": 32,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.012,
+            "solve": 0.0057,
+            "iters": null,
+            "l2": 0.008554,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.012,
+            "solve": 0.062,
+            "iters": 1000,
+            "l2": 0.008555,
+            "converged": false
+          },
+          "CG + Jacobi": {
+            "setup": 0.012,
+            "solve": 0.0345,
+            "iters": 451,
+            "l2": 0.008554,
+            "converged": true
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.012,
+            "solve": 0.0935,
+            "iters": 124,
+            "l2": 0.008554,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.0171,
+            "solve": 0.0682,
+            "iters": 79,
+            "l2": 0.008554,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.0171,
+            "solve": 0.0955,
+            "iters": 113,
+            "l2": 0.008554,
+            "converged": true
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0441,
+            "solve": 0.0049,
+            "iters": 24,
+            "l2": 0.0,
+            "converged": true
+          }
+        },
+        "wall": 0.5,
+        "geometry": "teapot.xml",
+        "splitpatches": 0,
+        "degree": 5,
+        "refinements": 2,
+        "timed_out": false
+      },
+      {
+        "dofs": 2502,
+        "npatches": 32,
+        "asm_time": 0.0395331,
+        "ieti_lagrange": 512,
+        "ieti_primal": 22,
+        "ieti_solves": 32,
+        "methods": {
+          "Direct (Cholesky)": {
+            "setup": 0.0363,
+            "solve": 0.0094,
+            "iters": null,
+            "l2": 0.005512,
+            "converged": true
+          },
+          "CG + no prec": {
+            "setup": 0.0363,
+            "solve": 0.0976,
+            "iters": 1000,
+            "l2": 0.00553,
+            "converged": false
+          },
+          "CG + Jacobi": {
+            "setup": 0.0363,
+            "solve": 0.1108,
+            "iters": 1000,
+            "l2": 0.005512,
+            "converged": false
+          },
+          "CG + symm. Gauss-Seidel": {
+            "setup": 0.0363,
+            "solve": 0.2625,
+            "iters": 230,
+            "l2": 0.005512,
+            "converged": true
+          },
+          "CG + multigrid": {
+            "setup": 0.045,
+            "solve": 0.1934,
+            "iters": 146,
+            "l2": 0.005512,
+            "converged": true
+          },
+          "Multigrid (standalone)": {
+            "setup": 0.045,
+            "solve": 1.3276,
+            "iters": 1000,
+            "l2": 0.04327,
+            "converged": false
+          },
+          "IETI-DP (CG on Schur)": {
+            "setup": 0.0694,
+            "solve": 0.002,
+            "iters": 25,
+            "l2": 0.0,
+            "converged": true
+          }
+        },
+        "wall": 2.2,
+        "geometry": "teapot.xml",
+        "splitpatches": 0,
+        "degree": 6,
+        "refinements": 2,
+        "timed_out": false
       }
     ],
     "splitpatches": [
       {
         "dofs": 750,
         "npatches": 32,
-        "asm_time": 0.00173497,
+        "asm_time": 0.00175333,
         "ieti_lagrange": 256,
         "ieti_primal": 22,
         "ieti_solves": 32,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0017,
+            "setup": 0.0018,
             "solve": 0.0007,
             "iters": null,
             "l2": 0.05003,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0017,
+            "setup": 0.0018,
             "solve": 0.0014,
             "iters": 176,
             "l2": 0.05003,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0017,
+            "setup": 0.0018,
             "solve": 0.0016,
             "iters": 126,
             "l2": 0.05003,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0017,
-            "solve": 0.0055,
+            "setup": 0.0018,
+            "solve": 0.0056,
             "iters": 61,
             "l2": 0.05003,
             "converged": true
@@ -576,20 +836,20 @@
           },
           "Multigrid (standalone)": {
             "setup": 0.0025,
-            "solve": 0.0034,
+            "solve": 0.0035,
             "iters": 30,
             "l2": 0.05003,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0065,
+            "setup": 0.0082,
             "solve": 0.0004,
             "iters": 19,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.0,
+        "wall": 0.1,
         "geometry": "teapot.xml",
         "splitpatches": 0,
         "degree": 2,
@@ -599,62 +859,62 @@
       {
         "dofs": 3090,
         "npatches": 128,
-        "asm_time": 0.0047524,
+        "asm_time": 0.00769615,
         "ieti_lagrange": 1152,
         "ieti_primal": 106,
         "ieti_solves": 128,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.0047,
+            "setup": 0.0056,
             "solve": 0.0036,
             "iters": null,
             "l2": 0.0211,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.0047,
-            "solve": 0.0162,
-            "iters": 516,
+            "setup": 0.0056,
+            "solve": 0.0173,
+            "iters": 519,
             "l2": 0.0211,
             "converged": true
           },
           "CG + Jacobi": {
-            "setup": 0.0047,
-            "solve": 0.0112,
-            "iters": 243,
+            "setup": 0.0056,
+            "solve": 0.0115,
+            "iters": 242,
             "l2": 0.0211,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.0047,
-            "solve": 0.0366,
+            "setup": 0.0056,
+            "solve": 0.0377,
             "iters": 106,
             "l2": 0.0211,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0074,
-            "solve": 0.0137,
+            "setup": 0.0084,
+            "solve": 0.0139,
             "iters": 32,
             "l2": 0.0211,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0074,
-            "solve": 0.0173,
+            "setup": 0.0084,
+            "solve": 0.0177,
             "iters": 41,
             "l2": 0.0211,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.0296,
-            "solve": 0.0035,
+            "setup": 0.033,
+            "solve": 0.0039,
             "iters": 24,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 0.2,
+        "wall": 0.3,
         "geometry": "teapot.xml",
         "splitpatches": 1,
         "degree": 2,
@@ -664,62 +924,62 @@
       {
         "dofs": 12570,
         "npatches": 512,
-        "asm_time": 0.0171149,
+        "asm_time": 0.0200677,
         "ieti_lagrange": 4864,
         "ieti_primal": 466,
         "ieti_solves": 512,
         "methods": {
           "Direct (Cholesky)": {
-            "setup": 0.017,
-            "solve": 0.0163,
+            "setup": 0.0195,
+            "solve": 0.0171,
             "iters": null,
             "l2": 0.004297,
             "converged": true
           },
           "CG + no prec": {
-            "setup": 0.017,
-            "solve": 0.1289,
+            "setup": 0.0195,
+            "solve": 0.1294,
             "iters": 1000,
             "l2": 0.004297,
             "converged": false
           },
           "CG + Jacobi": {
-            "setup": 0.017,
-            "solve": 0.0859,
+            "setup": 0.0195,
+            "solve": 0.0892,
             "iters": 479,
             "l2": 0.004297,
             "converged": true
           },
           "CG + symm. Gauss-Seidel": {
-            "setup": 0.017,
-            "solve": 0.2886,
+            "setup": 0.0195,
+            "solve": 0.2929,
             "iters": 208,
             "l2": 0.004297,
             "converged": true
           },
           "CG + multigrid": {
-            "setup": 0.0288,
-            "solve": 0.0981,
+            "setup": 0.032,
+            "solve": 0.1082,
             "iters": 48,
             "l2": 0.004297,
             "converged": true
           },
           "Multigrid (standalone)": {
-            "setup": 0.0288,
-            "solve": 0.1815,
-            "iters": 89,
+            "setup": 0.032,
+            "solve": 0.206,
+            "iters": 93,
             "l2": 0.004297,
             "converged": true
           },
           "IETI-DP (CG on Schur)": {
-            "setup": 0.1853,
-            "solve": 0.0589,
+            "setup": 0.2565,
+            "solve": 0.0825,
             "iters": 36,
             "l2": 0.0,
             "converged": true
           }
         },
-        "wall": 1.3,
+        "wall": 1.5,
         "geometry": "teapot.xml",
         "splitpatches": 2,
         "degree": 2,
