@@ -443,9 +443,8 @@ shared across all patches.
 \label{subsec:formulation}
 
 Let $\vect{\zeta}_k \in \R^{n_k \times (D+1)}$ be the \emph{geometry descriptor}
-of patch $k$: the $i$-th row collects the physical coordinates of the Greville
-abscissa~\cite{cottrell2009isogeometric} of local basis function $i$,
-$\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i) \in \R^D$, and its NURBS weight $w_i$,
+of patch $k$: the $i$-th entry collects the physical coordinates of the Greville
+abscissa $\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i) \in \R^D$ \cite{cottrell2009isogeometric}, and its NURBS weight $w_i$,
 \begin{equation}
     \vect{\zeta}_k
     = \bigl\{ \bigl(\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i),\, w_i\bigr)
@@ -481,7 +480,7 @@ $M_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times |\skel_k|}$\mg{dipendenza da 
 \end{equation}
 Linearity in $\vect{v}$ is immediate since $\vect{v}$ is not an input to the
 network.
-$M_\theta(\vect{\zeta}_k)$ is parameterized in the SPD factorized form
+$M_\theta(\vect{\zeta}_k)$ is parameterized in the SPD factorized form, see [CITE]\mg{fix citation once available}, as
 \begin{equation}
     M_\theta(\vect{\zeta}_k)
     = \frac{1}{\sqrt{\dv}}\,
@@ -492,26 +491,24 @@ $M_\theta(\vect{\zeta}_k)$ is parameterized in the SPD factorized form
 \end{equation}
 where $Q_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times \dv}$, $\dv$ is the
 latent dimension, and $\varepsilon_\theta > 0$ is a learnable scalar.
-The matrix $\dv^{-1/2} Q_\theta Q_\theta^{\top} + \varepsilon_\theta I$ is SPD
-for any $Q_\theta$ and $\varepsilon_\theta > 0$.
+The matrix $M_\theta(\vect{\zeta}_k)$ is SPD
+for any $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta > 0$.
 Applying~\eqref{eq:spd-param} costs $O(|\skel_k|\dv)$ via two matrix--vector
 products.
 
 The factor $Q_\theta(\vect{\zeta}_k)$ is computed by the IgaNet Transformer
-encoder of~\cite{moller2026iganet}\mg{fix citation once available}: the rows of $\vect{\zeta}_k$ are treated as
+encoder, the entries of $\vect{\zeta}_k$ are treated as
 a sequence of $n_k$ tokens in $\R^{D+1}$, processed through a learnable affine
-embedding plus sinusoidal positional encoding~\cite{vaswani2017attention},
-followed by $L$ layers of multi-head self-attention.
+embedding plus sinusoidal positional encoding,
+followed by $L$ layers of multi-head self-attention~\cite{vaswani2017attention}.
 A cross-attention resampling step then maps the encoded sequence to
-$G_\theta \in \R^{|\skel_k| \times \dv}$ using $|\skel_k|$ learnable target
-queries, and a final linear projection gives $Q_\theta = G_\theta W_Q$.
-We refer to~\cite{moller2026iganet} for the complete architecture details.
+$G_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times \dv}$ using $|\skel_k|$ learnable target
+queries, and a final linear projection gives $Q_\theta(\vect{\zeta}_k) = G_\theta(\vect{\zeta}_k) W_Q$.
+We refer to [CITE] for the complete architecture details.
 
 \begin{rmk}[PCG compatibility]
 \label{rmk:linearity}
-Since $\vect{v} \notin \mathrm{input}(\theta)$, the preconditioner
-$\Pneural$ in~\eqref{eq:neural-prec} is a linear SPD operator for every $\theta$,
-so standard PCG applies without modification.
+Since the preconditioner $\Pneural$ in~\eqref{eq:neural-prec} is a linear SPD preconditioner, it is compatible with the standard PCG without modifications. Furthermore we can adopt our preconditioner in the CG solver of the lagrange multiplier system~\eqref{eq:ieti-schur} without adopting flexible variants.
 \end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -575,29 +572,6 @@ The latent dimension $\dv$ and output heads $H$ are fixed per configuration;
 optimal hyperparameters and training results are reported in
 Section~\ref{sec:reference-benchmark}.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Correctness}
-\label{subsec:pcg-integration}
-
-The operator~\eqref{eq:neural-schur} enters IETI-DP only through
-$\Pneural$~\eqref{eq:neural-prec}; the system~\eqref{eq:ieti-schur} is solved
-exactly. Approximation error in $\Snn$ therefore does not perturb $\lagmult$
-or $u_h$ beyond the solver tolerance; it affects only the PCG iteration count.
-Performance is measured by iteration counts and effective condition numbers of
-$\Pneural\Fschur$, not by solution accuracy.
-
-Since $M_\theta(\vect{\zeta}_k)$ in~\eqref{eq:spd-param} is SPD for all
-$\theta$, $\Pneural$ is SPD and PCG applies. The geometry descriptors
-$\{\vect{\zeta}_k\}$ are assembled once and reused at every iteration.
-
-\begin{rmk}[Per-iteration cost]
-\label{rmk:cost-neural}
-Each application of $\Pneural$ requires $\npatch$ network evaluations at cost
-$O(|\skel_k|\,\dv)$ each, independent of $n_{k,I} = n_k - |\skel_k|$ and of
-$\kappa(A^{(k)}_{II})$.
-The exact preconditioner~\eqref{eq:scaled-dirichlet} requires $\npatch$
-triangular solves scaling as $O(n_{k,I}^{1.5})$ in two dimensions.
-\end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Section
@@ -629,8 +603,6 @@ uniform $h$-refinement level.
 
 The yeti domain is a planar multiply-connected B-spline multipatch domain with
 $\npatch = 21$ patches (Figure~\ref{fig:yeti-refcase}), all sides Dirichlet.
-Because $d = D = 2$, the manufactured solution $u = \sin(x)\cos(y)$,
-$f = 2\sin(x)\cos(y)$, is exact and the $L^2$ error is meaningful.
 
 \begin{figure}[!ht]
     \centering
@@ -676,7 +648,7 @@ $2.5\times$ faster than GMRES+ILU).
         \toprule
         Method &  solve [s] & iters & converged \\
         \midrule
-        \textbf{Direct Cholesky}                &  \textbf{0.06} & -    & yes \\
+        Direct Cholesky                &  0.06 & -    & yes \\
         GMRES (no preconditioner)       &  0.54 & 208  & yes \\
         GMRES + Jacobi                  &  0.44 & 153  & yes \\
         GMRES + symmetric Gauss--Seidel &  0.19 & 57   & yes \\
