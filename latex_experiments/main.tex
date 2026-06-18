@@ -26,9 +26,9 @@
 % notes
 \usepackage{todonotes}
 % To show the labels of sections, equations, figures, references, etc.
-% \usepackage{showkeys}
-% \renewcommand*\showkeyslabelformat[1]{%
-%   \fbox{\parbox[t]{\marginparwidth}{\raggedright\normalfont\tiny\ttfamily#1}}}
+\usepackage{showkeys}
+\renewcommand*\showkeyslabelformat[1]{%
+  \fbox{\parbox[t]{\marginparwidth}{\raggedright\normalfont\tiny\ttfamily#1}}}
 % To do notes
 \setlength{\marginparwidth}{2cm}
 \newcommand{\mg}[1]{\todo[color=green!20]{\textbf{MG:} #1}}
@@ -99,7 +99,7 @@
 
 % Schur complements
 \newcommand{\Sloc}[1]{S_{#1}}                    % local Dirichlet Schur complement
-\newcommand{\Snn}{\mathcal{S}^{\theta}}          % neural Schur operator
+\newcommand{\Snn}{\mathcal{S}_{\theta}}          % neural Schur operator
 
 % Primal constraints and basis
 \newcommand{\Cloc}[1]{C_{#1}}                    % primal constraint matrix
@@ -113,6 +113,9 @@
 % Preconditioners
 \newcommand{\Psd}{M_{sD}^{-1}}                   % scaled Dirichlet preconditioner
 \newcommand{\Pneural}{M_{\theta}^{-1}}            % neural preconditioner
+
+% Neural architecture
+\newcommand{\dv}{d_v}                             % latent dimension of Transformer
 
 % Multiplicity scaling
 \newcommand{\Dmult}[1]{D_{#1}}                   % multiplicity-weighted diagonal
@@ -153,14 +156,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Preliminaries} \label{sec:preliminaries}
 
-In this section we fix the notation and recall the principal concept needed in the
+In this section we fix the notation and recall the principal concepts needed in the
 remainder of the paper. We first define B-splines and the associated
 isogeometric spaces (Section~\ref{subsec:bsplines}), state the model problem and
 its multipatch discretization (Section~\ref{subsec:model}), and summarize the
 dual-primal Isogeometric Tearing and Interconnecting (IETI-DP) method
 (Section~\ref{subsec:ieti}) \cite{kleiss2012ieti}.
-In Section~\ref{subsec:neural-plan} we describe our main contribution, that consists in
-the replacement of the standard preconditioner by a single geometry-aware neural operator.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{B-splines and isogeometric spaces} \label{subsec:bsplines}
@@ -425,64 +426,178 @@ IETI-DP solver.
 \end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Neural preconditioning of the local Schur complements}
-\label{subsec:neural-plan}
+%% Section
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{The Neural Schur Preconditioner}
+\label{sec:neural-prec}
 
-The contribution of this paper is to replace the exact local Dirichlet Schur
-complements $\Sloc{k}$ in the scaled Dirichlet preconditioner~\eqref{eq:scaled-dirichlet}
-by a single, geometry-aware learned operator. We introduce a neural operator
+The per-iteration cost of IETI-DP is dominated by evaluating $\Sloc{k}$ for
+every patch in the scaled Dirichlet preconditioner~\eqref{eq:scaled-dirichlet}
+(Remark~\ref{rmk:schur-cost}).
+We propose to replace each such solve with one evaluation of a learned linear
+operator $\Snn(\,\cdot\,;\vect{\zeta}_k)$ conditioned on the patch geometry and
+shared across all patches.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Formulation}
+\label{subsec:formulation}
+
+Let $\vect{\zeta}_k \in \R^{n_k \times (D+1)}$ be the \emph{geometry descriptor}
+of patch $k$: the $i$-th row collects the physical coordinates of the Greville
+abscissa~\cite{cottrell2009isogeometric} of local basis function $i$,
+$\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i) \in \R^D$, and its NURBS weight $w_i$,
 \begin{equation}
-    \Snn\bigl(\,\cdot\,;\, \vect{\zeta}_k\bigr)
-    : \R^{|\skel_k|} \longrightarrow \R^{|\skel_k|},
-    \qquad
-    \vect{v} \longmapsto \Snn(\vect{v}; \vect{\zeta}_k)
-    \approx \Sloc{k} \vect{v},
-    \label{eq:neural-schur}
-\end{equation}
-with weights $\theta$ that are shared across all patches and conditioned on
-a patch-dependent geometry descriptor $\vect{\zeta}_k$. The descriptor encodes the
-local geometry per degree of freedom: for each local basis function we take the
-physical coordinates of its Greville abscissa, $\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i)
-\in \R^{D}$, together with its NURBS weight $w_i$ (equal to one for B-splines),
-\begin{equation}
-    \vect{\zeta}_k = \bigl\{ (\,x_i, y_i, z_i, w_i\,) \bigr\}_{i=1}^{n_k},
-    \qquad (x_i, y_i, z_i) = \gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i),
+    \vect{\zeta}_k
+    = \bigl\{ \bigl(\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i),\, w_i\bigr)
+      \bigr\}_{i=1}^{n_k}.
     \label{eq:geom-features}
 \end{equation}
-so that the same trained network applies to every patch geometry without
-retraining. Substituting~\eqref{eq:neural-schur} into~\eqref{eq:scaled-dirichlet}
-defines the \emph{neural scaled Dirichlet preconditioner}
+We define the \emph{neural Schur operator} with shared weights $\theta$ as
+\begin{equation}
+    \Snn\bigl(\,\cdot\,;\, \vect{\zeta}_k\bigr)
+    : \R^{|\skel_k|} \to \R^{|\skel_k|},
+    \qquad
+    \vect{v} \mapsto \Snn(\vect{v}; \vect{\zeta}_k) \approx \Sloc{k} \vect{v},
+    \label{eq:neural-schur}
+\end{equation}
+and the \emph{neural scaled Dirichlet preconditioner} by substituting~\eqref{eq:neural-schur}
+into~\eqref{eq:scaled-dirichlet}:
 \begin{equation}
     \Pneural = \sum_{k=1}^{\npatch}
     \Jskel{k}\, \Dmult{k}^{-1}\, \Snn(\,\cdot\,;\vect{\zeta}_k)\,
     \Dmult{k}^{-1}\, \Jskel{k}^{\top}.
     \label{eq:neural-prec}
 \end{equation}
-In practice the network is defined on the full local degree-of-freedom vector of
-the patch; its action on a skeleton vector is obtained by zero-extending the
-input from $\skel_k$ to the full index set, evaluating the network, and
-restricting the output back to $\skel_k$. A single forward pass thus replaces the
-interior solve of Remark~\ref{rmk:schur-cost}, reducing the per-iteration,
-per-patch cost from a sparse triangular solve with $A^{(k)}_{II}$ to one
-evaluation of $\Snn$, at a cost proportional to the network size
-and independent of the conditioning of $A^{(k)}_{II}$.
 
-Two properties make this substitution mathematically sound. First, the operator
-$\Snn$ enters the algorithm only through the
-preconditioner~\eqref{eq:neural-prec}: the system actually solved by CG remains
-the exact Schur-complement system~\eqref{eq:ieti-schur}. Consequently, any
-approximation error in $\Snn$ does not perturb the computed
-solution $\lagmult$---and hence the reconstructed field $u_h$---beyond the
-prescribed solver tolerance; it can only affect the number of iterations.
-The quality of the learned operator is therefore measured by iteration counts and
-condition numbers, not by solution accuracy, and the comparison against the exact
-preconditioner~\eqref{eq:scaled-dirichlet} is exact and fair. Second, since
-$\Sloc{k}$ in~\eqref{eq:local-schur} is symmetric positive definite, the target of the
-learned operator is SPD; the network is trained to approximate this SPD action, so
-that $\Pneural$ remains a valid (SPD) preconditioner for the conjugate
-gradient method whenever the approximation is sufficiently accurate. We make the
-architecture of $\Snn$, its training, and the empirical behavior
-of~\eqref{eq:neural-prec} precise in the following sections.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Architecture}
+\label{subsec:architecture}
+
+The network takes only $\vect{\zeta}_k$ as input and outputs a matrix
+$M_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times |\skel_k|}$\mg{dipendenza da k, capire come gestirla, se fare proiezione e prolungamento o supporre che siano tutte uguali tra loro}, so that
+\begin{equation}
+    \Snn(\vect{v};\,\vect{\zeta}_k) = M_\theta(\vect{\zeta}_k)\,\vect{v}.
+    \label{eq:matrix-form}
+\end{equation}
+Linearity in $\vect{v}$ is immediate since $\vect{v}$ is not an input to the
+network.
+$M_\theta(\vect{\zeta}_k)$ is parameterized in the SPD factorized form
+\begin{equation}
+    M_\theta(\vect{\zeta}_k)
+    = \frac{1}{\sqrt{\dv}}\,
+      Q_\theta(\vect{\zeta}_k)\,
+      Q_\theta(\vect{\zeta}_k)^{\top}
+      + \varepsilon_\theta\, I,
+    \label{eq:spd-param}
+\end{equation}
+where $Q_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times \dv}$, $\dv$ is the
+latent dimension, and $\varepsilon_\theta > 0$ is a learnable scalar.
+The matrix $\dv^{-1/2} Q_\theta Q_\theta^{\top} + \varepsilon_\theta I$ is SPD
+for any $Q_\theta$ and $\varepsilon_\theta > 0$.
+Applying~\eqref{eq:spd-param} costs $O(|\skel_k|\dv)$ via two matrix--vector
+products.
+
+The factor $Q_\theta(\vect{\zeta}_k)$ is computed by the IgaNet Transformer
+encoder of~\cite{moller2026iganet}\mg{fix citation once available}: the rows of $\vect{\zeta}_k$ are treated as
+a sequence of $n_k$ tokens in $\R^{D+1}$, processed through a learnable affine
+embedding plus sinusoidal positional encoding~\cite{vaswani2017attention},
+followed by $L$ layers of multi-head self-attention.
+A cross-attention resampling step then maps the encoded sequence to
+$G_\theta \in \R^{|\skel_k| \times \dv}$ using $|\skel_k|$ learnable target
+queries, and a final linear projection gives $Q_\theta = G_\theta W_Q$.
+We refer to~\cite{moller2026iganet} for the complete architecture details.
+
+\begin{rmk}[PCG compatibility]
+\label{rmk:linearity}
+Since $\vect{v} \notin \mathrm{input}(\theta)$, the preconditioner
+$\Pneural$ in~\eqref{eq:neural-prec} is a linear SPD operator for every $\theta$,
+so standard PCG applies without modification.
+\end{rmk}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Training}
+\label{subsec:training}
+
+\paragraph{Dataset.}
+For each patch geometry in a training collection, $N_{\mathrm{data}} = 20\,000$
+probe vectors $\vect{v}^{(i)} \in \R^{|\skel_k|}$ are drawn from a Gaussian
+random field (GRF) on the skeleton~\cite{adler2010geometry} with exponential
+covariance
+\begin{equation}
+    \mathrm{Cov}\bigl(\vect{v}(\vect{x}),\, \vect{v}(\vect{y})\bigr)
+    = \sigma^2 \exp\!\Bigl(-\frac{\|\vect{x}-\vect{y}\|}{\lambda}\Bigr),
+    \quad \lambda = 2d^2,\; d = 0.05,\; \sigma = 1,
+    \label{eq:grf-cov}
+\end{equation}
+following~\cite{kopanivcakova2025deeponet}.
+The probe vectors are not network inputs; they evaluate the loss.
+Targets $\Sloc{k}\vect{v}^{(i)}$ are computed from the local factorizations in
+Algorithm~\ref{alg:ieti-dp}.
+The dataset is split into training (80\%), validation (10\%), and test (10\%) sets.
+
+\paragraph{Loss.}
+\begin{equation}
+    \mathrm{Loss}
+    = \frac{1}{N_{\mathrm{train}}}
+      \sum_{i=1}^{N_{\mathrm{train}}}
+      \Bigl(\frac{1}{|\skel_k|}
+        \bigl\|M_\theta(\vect{\zeta}_k)\,\vect{v}^{(i)}
+              - \Sloc{k}\vect{v}^{(i)}
+        \bigr\|^2_2
+      \Bigr)^{1/2}.
+    \label{eq:loss}
+\end{equation}
+
+\paragraph{Optimizer and hyperparameters.}
+Training uses AdamW~\cite{loshchilov2019decoupledweightdecayregularization} for
+$500$ epochs (batch size $100$) with step learning-rate decay.
+Hyperparameters are selected by HyperNOs~\cite{ghiotto2025hypernos} via
+TPE~\cite{watanabe2023tree,bergstra2015hyperopt} and
+ASHA~\cite{li2020massivelyparallelhyperparametertuning} over $200$ trials.
+The search space is:
+\begin{center}
+\begin{tabular}{ll}
+    \toprule
+    Hyperparameter & Range \\
+    \midrule
+    Learning rate $\lambda$ & $[10^{-4}, 10^{-2}]$ \\
+    LR reduction factor $\eta$ & $[0.75, 0.99]$ \\
+    Weight decay $w$ & $[10^{-6}, 10^{-4}]$ \\
+    Dropout~\cite{srivastava2014dropout} $\gamma$ & $[0.00, 0.10]$ \\
+    Encoder layers $L$ & $\{1, \dots, 5\}$ \\
+    Encoder heads $n_h$ & divisors of $\dv$ \\
+    Output heads $H$ & $\{1, 3\}$ \\
+    Attention activation $\sigma$ & $\{\mathrm{ReLU}, \mathrm{GELU}, \mathrm{Softmax}\}$ \\
+    \bottomrule
+\end{tabular}
+\end{center}
+The latent dimension $\dv$ and output heads $H$ are fixed per configuration;
+optimal hyperparameters and training results are reported in
+Section~\ref{sec:reference-benchmark}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Correctness}
+\label{subsec:pcg-integration}
+
+The operator~\eqref{eq:neural-schur} enters IETI-DP only through
+$\Pneural$~\eqref{eq:neural-prec}; the system~\eqref{eq:ieti-schur} is solved
+exactly. Approximation error in $\Snn$ therefore does not perturb $\lagmult$
+or $u_h$ beyond the solver tolerance; it affects only the PCG iteration count.
+Performance is measured by iteration counts and effective condition numbers of
+$\Pneural\Fschur$, not by solution accuracy.
+
+Since $M_\theta(\vect{\zeta}_k)$ in~\eqref{eq:spd-param} is SPD for all
+$\theta$, $\Pneural$ is SPD and PCG applies. The geometry descriptors
+$\{\vect{\zeta}_k\}$ are assembled once and reused at every iteration.
+
+\begin{rmk}[Per-iteration cost]
+\label{rmk:cost-neural}
+Each application of $\Pneural$ requires $\npatch$ network evaluations at cost
+$O(|\skel_k|\,\dv)$ each, independent of $n_{k,I} = n_k - |\skel_k|$ and of
+$\kappa(A^{(k)}_{II})$.
+The exact preconditioner~\eqref{eq:scaled-dirichlet} requires $\npatch$
+triangular solves scaling as $O(n_{k,I}^{1.5})$ in two dimensions.
+\end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Section
@@ -490,30 +605,145 @@ of~\eqref{eq:neural-prec} precise in the following sections.
 \section{Reference benchmark}
 \label{sec:reference-benchmark}
 
-The learned operator of Section~\ref{subsec:neural-plan} is compared
-against classical and strong baseline. All experiments are run on a single machine with
-$12$ cores; every solver uses the same shared-memory parallelism, the same
-stopping tolerance $10^{-8}$ and the same maximum of $1000$ iterations; reported
-timings are the mean over five different repetitions.\mg{State CPU model.}
+All experiments run on a 12-core machine with shared-memory parallelism,
+stopping tolerance $10^{-8}$, and maximum $1000$ iterations.\mg{State CPU model.}
+Timings are the mean over five repetitions.
 
 \subsection{Setup} \label{subsec:bench-setup}
 
-On one and the same isogeometric Poisson discretization~\eqref{eq:global-system}
-we compare the GMRES and CG methods
-with Jacobi, symmetric Gauss--Seidel, ILU and geometric
-multigrid preconditioners, geometric multigrid as a standalone solver, and the IETI-DP solver of
-Section~\ref{subsec:ieti}. Geometry, basis, boundary conditions and right-hand
-side are identical across all methods.
-% We use two multipatch surfaces
-% embedded in $\R^3$: an open \emph{teapot} ($32$ NURBS patches), used as the
-% reference and for the parameter studies, and the closed \emph{hummingbird}
-% surface, used as a harder stress case (Section~\ref{subsec:bench-hummingbird}).
-We vary the three parameters that control the subdomain structure and the local
-problem size: the number of uniform patch splits (each split multiplies the
-subdomain count by $2^d$), the local polynomial degree $p$, and the uniform
-$h$-refinement. Figure~\ref{fig:refcase}
-illustrates the reference discretization, the source data and the computed
-solution.
+We compare GMRES and CG with Jacobi, symmetric Gauss--Seidel, ILU, and geometric
+multigrid preconditioners; geometric multigrid as a standalone solver; and the
+IETI-DP solver of Section~\ref{subsec:ieti}. Geometry, basis, boundary
+conditions, and right-hand side are identical across all methods.
+Two test geometries are considered: a planar B-spline multipatch domain in $\R^2$
+(Section~\ref{subsec:bench-2d}) and an open NURBS surface in $\R^3$
+(Section~\ref{subsec:bench-3d}).
+Each sweep varies one of three parameters: the number of uniform patch splits
+($\times 2^d$ subdomains per split), the local polynomial degree $p$, or the
+uniform $h$-refinement level.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Two-dimensional benchmark: yeti domain}
+\label{subsec:bench-2d}
+
+The yeti domain is a planar multiply-connected B-spline multipatch domain with
+$\npatch = 21$ patches (Figure~\ref{fig:yeti-refcase}), all sides Dirichlet.
+Because $d = D = 2$, the manufactured solution $u = \sin(x)\cos(y)$,
+$f = 2\sin(x)\cos(y)$, is exact and the $L^2$ error is meaningful.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{subfigure}[b]{0.27\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_geom.pdf}
+        \caption{Multipatch discretization}
+        \label{fig:yeti-refcase-mesh}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_rhs.pdf}
+        \caption{Right-hand side}
+        \label{fig:yeti-refcase-rhs}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_sol.pdf}
+        \caption{Computed solution}
+        \label{fig:yeti-refcase-sol}
+    \end{subfigure}
+    \caption{Reference case (yeti domain, $21$ patches, $p = 2$, $r = 3$):
+    the multipatch discretization, the source term, and the IETI solution.}
+    \label{fig:yeti-refcase}
+\end{figure}
+
+\subsubsection{Reference case} \label{subsubsec:bench-2d-reference}
+
+The reference case uses $p = 2$, $r = 3$: $N = 22\,272$ dofs, $\Lambda = 768$
+Lagrange multipliers. Every patch corner is a Dirichlet node, so $\nprim = 0$
+and IETI-DP reduces to plain IETI. Table~\ref{tab:yeti-reference} shows that IETI
+is the fastest iterative solver at $0.02\,$s ($3.4\times$ faster than CG+multigrid,
+$2.5\times$ faster than GMRES+ILU).
+
+\begin{table}[t]
+    \centering
+    \caption{Reference case (yeti domain, $\npatch = 21$, $p = 2$, $r = 3$;
+    $N = 22\,272$). Iterative solvers share the tolerance $10^{-8}$.
+    IETI iteration counts are CG steps on the interface
+    problem~\eqref{eq:ieti-schur} and are not directly comparable with the
+    global-system counts.}
+    \label{tab:yeti-reference}
+    \begin{tabular}{lccc}
+        \toprule
+        Method &  solve [s] & iters & converged \\
+        \midrule
+        \textbf{Direct Cholesky}                &  \textbf{0.06} & -    & yes \\
+        GMRES (no preconditioner)       &  0.54 & 208  & yes \\
+        GMRES + Jacobi                  &  0.44 & 153  & yes \\
+        GMRES + symmetric Gauss--Seidel &  0.19 & 57   & yes \\
+        GMRES + ILU                     &  0.05 & 50   & yes \\
+        GMRES + multigrid               &  0.08 & 12   & yes \\
+        CG (no preconditioner)          &  0.06 & 229  & yes \\
+        CG + Jacobi                     &  0.06 & 169  & yes \\
+        CG + symmetric Gauss--Seidel    &  0.17 & 58   & yes \\
+        CG + ILU                        &  0.70 & 1000 & no  \\
+        CG + multigrid                  &  0.07 & 12   & yes \\
+        Multigrid (standalone)          &  0.11 & 17   & yes \\
+        IETI (no preconditioner)        &  0.04 & 46   & yes \\
+        \textbf{IETI}                   &  \textbf{0.02} & 16 & yes \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsubsection{Parameter studies} \label{subsubsec:bench-2d-sweeps}
+
+Figures~\ref{fig:yeti-sweep-refinement}--\ref{fig:yeti-sweep-splitpatches} show
+solve times as each discretization parameter is varied around the reference case.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_time_vs_refinement.pdf}
+        \caption{Mesh resolution $r$, at $\npatch = 21$, $p = 2$.}
+        \label{fig:yeti-sweep-refinement}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_time_vs_degree.pdf}
+        \caption{Polynomial degree $p$, at $\npatch = 21$, $r = 2$.}
+        \label{fig:yeti-sweep-degree}
+    \end{subfigure}
+    \par\medskip
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_time_vs_splitpatches.pdf}
+        \caption{Number of subdomains $K$, at $p = 2$, $r = 2$.}
+        \label{fig:yeti-sweep-splitpatches}
+    \end{subfigure}
+    \caption{Yeti domain: solve times as each discretization parameter is varied around
+    the reference case ($\npatch = 21$, $p = 2$, $r = 2$).}
+    \label{fig:yeti-sweeps}
+\end{figure}
+
+\emph{(i)~Mesh resolution} (Figure~\ref{fig:yeti-sweep-refinement}):
+multigrid leads only at $r = 1$ ($1\,536$ dofs); from $r = 2$ onward IETI leads,
+reaching $5.7\times$ at $r = 4$ ($0.16\,$s vs.\ $0.88\,$s).
+\emph{(ii)~Polynomial degree} (Figure~\ref{fig:yeti-sweep-degree}):
+IETI leads at every $p$; the gap grows from $1.5\times$ at $p = 1$ to $17\times$
+at $p = 4$ ($0.008\,$s vs.\ $0.13\,$s).
+\emph{(iii)~Number of subdomains} (Figure~\ref{fig:yeti-sweep-splitpatches}):
+IETI leads at $5.3\times$ ($K = 21$); the advantage shrinks at $K = 84$
+($2.7\times$) and $K = 336$ ($1.4\times$) as the cost of~\eqref{eq:ieti-schur}
+grows with the Lagrange multiplier count.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Three-dimensional benchmark: teapot surface}
+\label{subsec:bench-3d}
+
+The teapot is an open NURBS surface in $\R^3$ with $\npatch = 32$ patches
+(Figure~\ref{fig:refcase}). The physical domain is a curved manifold ($d = 2 < D = 3$),
+so the assembled operator is the Laplace--Beltrami operator and the Jacobian is
+non-square (Moore--Penrose pseudo-inverse used for physical gradients). The field
+$u = \sin(x)\cos(y)$ is no longer exact, so the $L^2$ column measures
+inter-method agreement, not solution accuracy.
 
 \begin{figure}[t]
     \centering
@@ -539,16 +769,13 @@ solution.
     \label{fig:refcase}
 \end{figure}
 
-\subsection{Reference case} \label{subsec:bench-reference}
+\subsubsection{Reference case} \label{subsubsec:bench-3d-reference}
 
-The reference discretization is the teapot surface with $\npatch = 32$ patches
-, degree $p = 2$ and refinement $r = 3$ in each patch, giving $N = 2502$
-coupled degrees of freedom; the IETI-DP interface problem~\eqref{eq:ieti-schur}
-has $\Lambda = 512$ Lagrange multipliers and $\nprim = 22$ primal degrees of
-freedom (corner constraints). Table~\ref{tab:reference} reports the results.
-Among the iterative solvers, IETI-DP is the fastest: its solve takes
-$0.05\,$s, against $0.31\,$s for GMRES and CG preconditioned with multigrid ($6.2\times$
-faster) and $0.39\,$s for standalone multigrid ($7.8\times$ faster).
+The reference case uses $p = 2$, $r = 3$: $N = 2502$ dofs, $\Lambda = 512$
+Lagrange multipliers, $\nprim = 22$ primal dofs (corner constraints).
+Table~\ref{tab:reference} shows IETI-DP as the fastest iterative solver at
+$0.05\,$s ($6.2\times$ faster than GMRES/CG+multigrid, $7.8\times$ faster than
+standalone multigrid).
 
 \begin{table}[t]
     \centering
@@ -580,66 +807,55 @@ faster) and $0.39\,$s for standalone multigrid ($7.8\times$ faster).
     \end{tabular}
 \end{table}
 
-\subsection{Parameter studies} \label{subsec:bench-sweeps}
+\subsubsection{Parameter studies} \label{subsubsec:bench-3d-sweeps}
 
-We now vary one discretization parameter at a time around the reference case and
-record the solve times of IETI-DP and other global solvers
-(Figure~\ref{fig:sweeps}). The solve time is the relevant quantity for the
-present work: the neural operator~\eqref{eq:neural-schur} replaces the local
-Schur-complement action applied once per interface iteration, i.e.\ it acts
-within the solve phase, not the assembly.
+Figures~\ref{fig:sweep-refinement}--\ref{fig:sweep-splitpatches} record solve
+times as each parameter is varied. The solve phase is the target of the neural
+operator~\eqref{eq:neural-schur}, which replaces one Schur-complement action
+per PCG iteration.
 
-\begin{figure}[ht!]
+\begin{figure}[!ht]
     \centering
-    \includegraphics[width=0.8\textwidth]{figures/time_vs_refinement.pdf}
-    \caption{Mesh resolution per patch (uniform refinement $r$), at
-    $\npatch = 32$, $p = 2$.}
-    \label{fig:sweep-refinement}
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/time_vs_refinement.pdf}
+        \caption{Mesh resolution $r$, at $\npatch = 32$, $p = 2$.}
+        \label{fig:sweep-refinement}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/time_vs_degree.pdf}
+        \caption{Polynomial degree $p$, at $\npatch = 32$, $r = 2$.}
+        \label{fig:sweep-degree}
+    \end{subfigure}
+    \par\medskip
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/time_vs_splitpatches.pdf}
+        \caption{Number of subdomains, at $p = 2$, $r = 2$.}
+        \label{fig:sweep-splitpatches}
+    \end{subfigure}
+    \caption{Teapot surface: solve times as each discretization parameter is varied
+    around the reference case ($\npatch = 32$, $p = 2$, $r = 2$).}
+    \label{fig:sweeps}
 \end{figure}
 
-\begin{figure}[ht!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{figures/time_vs_degree.pdf}
-    \caption{Local polynomial degree $p$, at $\npatch = 32$, $r = 2$.}
-    \label{fig:sweep-degree}
-\end{figure}
-
-\begin{figure}[ht!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{figures/time_vs_splitpatches.pdf}
-    \caption{Number of subdomains (uniform splits), at $p = 2$, $r = 2$.}
-    \label{fig:sweep-splitpatches}
-\end{figure}
-
-Three trends emerge. \emph{(i)~Mesh resolution}
-(Figure~\ref{fig:sweep-refinement}): the IETI-DP solve time grows markedly more
-slowly than that of multigrid; multigrid is faster only on the trivially small
-$r = 1$ grid ($258$ dofs), and from $r = 2$ onward IETI-DP leads, by $7.4\times$
-at $r = 4$ ($0.23\,$s versus $1.68\,$s). \emph{(ii)~Polynomial degree}
-(Figure~\ref{fig:sweep-degree}): IETI-DP is faster at every degree and the gap
-widens with $p$ (from $2.5\times$ at $p = 1$ to $17\times$ at $p = 4$), the
-multigrid smoother degrading as the local spectra spread with degree elevation.
-\emph{(iii)~Number of subdomains} (Figure~\ref{fig:sweep-splitpatches}): IETI-DP
-is fastest when the subdomains are few and large ($4.8\times$ at $32$ patches,
-$3.4\times$ at $128$), but the advantage shrinks as the patches multiply and the
-interface problem grows---at $512$ patches the two methods are comparable. This
-is the expected behaviour: the cost of~\eqref{eq:ieti-schur} is driven by the
-number of Lagrange multipliers and of local solves, both of which scale with the
-subdomain count.
-
-The assembly is performed once and is
-independent of the solver, whereas the neural preconditioner targets the repeated
-solve phase, where IETI-DP already leads in the reference regime (few large
-patches) and where the learned operator is designed to reduce the cost further by
-replacing each interior solve (Remark~\ref{rmk:schur-cost}) with a single forward
-pass.
+\emph{(i)~Mesh resolution} (Figure~\ref{fig:sweep-refinement}):
+multigrid leads only at $r = 1$ ($258$ dofs); from $r = 2$ onward IETI-DP
+leads, reaching $7.4\times$ at $r = 4$ ($0.23\,$s vs.\ $1.68\,$s).
+\emph{(ii)~Polynomial degree} (Figure~\ref{fig:sweep-degree}):
+IETI-DP leads at every $p$; the gap grows from $2.5\times$ at $p = 1$ to
+$17\times$ at $p = 4$, consistent with multigrid smoother deterioration as
+local spectral condition numbers increase with $p$.
+\emph{(iii)~Number of subdomains} (Figure~\ref{fig:sweep-splitpatches}):
+IETI-DP leads at $4.8\times$ ($32$ patches) and $3.4\times$ ($128$ patches);
+the advantage shrinks at $512$ patches, where the cost of~\eqref{eq:ieti-schur}
+(proportional to the number of Lagrange multipliers) becomes dominant.
 
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Bibliography (Harvard notation)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% \clearpage
+\clearpage
 \begin{thebibliography}{99}
     \bibitem{van2003iterative}
     Van der Vorst, H.A., 2003. Iterative Krylov methods for large linear systems (No. 13). Cambridge University Press.
