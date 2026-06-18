@@ -75,8 +75,8 @@ DOMAINS = {
         geometry=TEAPOT,
         reference=dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=3),
         plan=dict(
-            refinement=[dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4)],
-            degree    =[dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4)],
+            refinement=[dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4, 5, 6)],
+            degree    =[dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
             splitpatches=[dict(geometry=TEAPOT, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
         ),
         results_json=os.path.join(HERE, "results_teapot.json"),
@@ -87,8 +87,8 @@ DOMAINS = {
         geometry=YETI,
         reference=dict(geometry=YETI, splitpatches=0, degree=2, refinements=2),
         plan=dict(
-            refinement=[dict(geometry=YETI, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4)],
-            degree    =[dict(geometry=YETI, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4)],
+            refinement=[dict(geometry=YETI, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4, 5, 6)],
+            degree    =[dict(geometry=YETI, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
             splitpatches=[dict(geometry=YETI, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
         ),
         results_json=os.path.join(HERE, "results_yeti.json"),
