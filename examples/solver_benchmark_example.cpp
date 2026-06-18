@@ -365,6 +365,7 @@ int main(int argc, char *argv[])
     index_t maxIterations = 1000;
     index_t numRun = 1;
     bool    plot   = false;
+    bool    skipIETI_noprec = true;
     std::string mgSmoother("GaussSeidel");
     index_t mgLevels = -1;
     index_t mgPreSmooth = 1;
@@ -394,6 +395,7 @@ int main(int argc, char *argv[])
     cmd.addString("",  "Solvers",               "Solvers to try (comma-separated list, e.g. CG,GMRES,MinRes) or 'all'. Available: CG, MinRes, MinRes-QLP, GMRES, BiCGStab, Gradient, Multigrid", chosenSolvers);
     cmd.addString("",  "Preconditioners",       "Preconditioners to try (comma-separated list, e.g. Jacobi,ILU) or 'all'. Available: no prec, Jacobi, Gauss-Seidel, rev. Gauss-Seidel, symm. Gauss-Seidel, Richardson, ILU, multigrid", chosenPrecs);
     cmd.addSwitch(     "plot",                  "Write geometry, source and solution to Paraview files", plot);
+    cmd.addSwitch(     "SkipIETI_noprec",       "Skip the unpreconditioned IETI-DP variant (CG without scaled-Dirichlet preconditioner)", skipIETI_noprec);
 
     // Multigrid sub-options consumed by gsGridHierarchy / gsMultiGridOp.
     cmd.addInt   ("l", "MG.Levels",             "Number of multigrid levels (default: = Refinements)", mgLevels);
@@ -920,6 +922,12 @@ int main(int argc, char *argv[])
                 std::set<index_t> seen;
                 for (size_t i = 0; i < pDofIndices.size(); ++i)
                 {
+                    // Skip constraints whose vector is zero: the corner DOF is
+                    // entirely on the Dirichlet boundary for this patch, so it
+                    // has been eliminated from the local free-DOF basis.
+                    // Adding a zero row/column to the saddle-point system would
+                    // make it singular and crash the SparseLU solve.
+                    if (pConstraints[i].nonZeros() == 0) continue;
                     if (seen.find(pDofIndices[i]) == seen.end())
                     {
                         uniqueConstraints.push_back(pConstraints[i]);
@@ -993,6 +1001,7 @@ int main(int argc, char *argv[])
         results.push_back(r);
 
         // Unpreconditioned variant: same Schur complement, identity preconditioner.
+        if (!skipIETI_noprec)
         {
             gsMatrix<> lambda2, errorHistory2;
             double ietiSolve2 = 0;
