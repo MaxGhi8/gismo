@@ -265,7 +265,7 @@ def plot(cfg):
         ax.set_yscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel("solve time [s]")
-        ax.set_title("Solve time")
+        # ax.set_title("Solve time")
         ax.grid(True, which="both", ls=":", alpha=0.5)
         ax.legend(fontsize="small")
 
@@ -276,8 +276,8 @@ def plot(cfg):
         if xs_all:
             ax.set_xticks(sorted(xs_all))
 
-        fig.suptitle(f"{cfg['title']}: Solver Comparison, sweep over {sweep}")
-        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        # fig.suptitle(f"{cfg['title']}: Solver Comparison, sweep over {sweep}")
+        fig.tight_layout()
         path = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}time_vs_{sweep}.pdf")
         fig.savefig(path)
         fig.savefig(path.replace(".pdf", ".png"), dpi=140)
