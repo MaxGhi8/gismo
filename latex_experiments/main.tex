@@ -598,7 +598,10 @@ Timings are the mean over five repetitions.
 
 We compare GMRES and CG with Jacobi, symmetric Gauss--Seidel, ILU, and geometric
 multigrid preconditioners; geometric multigrid as a standalone solver; and the
-IETI-DP solver of Section~\ref{subsec:ieti}. Geometry, basis, boundary
+IETI-DP solver of Section~\ref{subsec:ieti}.
+%The geometric multigrid uses Gauss--Seidel smoothing (one pre-/post-smooth step,
+%V-cycle; levels equal to the number of $h$-refinement steps). 
+Geometry, basis, boundary
 conditions, and right-hand side are identical across all methods.
 Two test geometries are considered: a planar B-spline multipatch domain in $\R^2$
 (Section~\ref{subsec:bench-2d}) and an open NURBS surface in $\R^3$
@@ -649,7 +652,7 @@ For IGA with tensor-product B-splines of degree $p$, each basis function
 couples $O(p^d)$ neighbours; the nested-dissection separators grow by a
 factor $p$, raising the factorization cost to $O(p^3 N^{3/2})$ in 2D.
 
-\paragraph{Conjugate gradient without preconditioner.}
+\paragraph{Conjugate gradient.}
 The stiffness matrix condition number satisfies~\cite[Thm.~4.3]{gahalaut2019condition}
 \begin{equation}
   \kappa(A) \;\sim\; h^{-2} \;\sim\; \frac{N}{K}.
@@ -661,7 +664,7 @@ bound~\cite[Thm.~6.29]{saad2003iterative} gives
 $\|e_k\|_{A} \le 2\!\left(\tfrac{\sqrt{\kappa(A)}-1}{\sqrt{\kappa(A)}+1}\right)^{\!k}\|e_0\|_{A}$,
 the number of iterations to reach tolerance $\varepsilon$ scales as
 $O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left((N/K)^{1/2}\right)$
-and the total solve cost as $O\!\left(N^{3/2}/K^{1/2}\right)$~\cite[Ch.~5]{hackbusch1994iterative}.
+and the total solve cost as $O\!\left(N^{3/2}/K^{1/2}\right)$.
 For degree elevation at fixed $h$ the condition number grows
 super-algebraically: $\kappa(A)\leq C\,p^{2d+2}4^{pd}$~\cite[Thm.~4.8]{gahalaut2019condition},
 making unpreconditioned CG rapidly intractable as $p$ increases.
@@ -669,9 +672,15 @@ making unpreconditioned CG rapidly intractable as $p$ increases.
 Jacobi and symmetric Gauss--Seidel preconditioners reduce the spectral radius but leave the asymptotic order
 of the condition number unchanged:
 $\kappa(M_{\mathrm{J}}^{-1}A) = O(h^{-2})$ and
-$\kappa(M_{\mathrm{GS}}^{-1}A) = O(h^{-2})$~\cite[\S10.1]{saad2003iterative}.
+$\kappa(M_{\mathrm{GS}}^{-1}A) = O(h^{-2})$ \mg{Check this ...}.
 The iteration count therefore retains the same $O\!\left((N/K)^{1/2}\right)$
 scaling with an improved (but not asymptotically better) constant.
+
+\paragraph{GMRES.}
+For the SPD systems arising from~\eqref{eq:poisson-strong}, the convergence
+bound~\cite[Cor.~6.33]{saad2003iterative} reduces to the CG bound~\cite[Thm.~6.29]{saad2003iterative},
+giving the same $O\!\left((N/K)^{1/2}\right)$ iteration count and $O\!\left(N^{3/2}/K^{1/2}\right)$
+total cost. The condition number and degree scaling are identical to the CG case.
 
 \paragraph{Geometric multigrid.}
 Under standard elliptic regularity a $V$-cycle with one pre- and one
@@ -746,22 +755,22 @@ Three consequences govern the parameter sweeps.
     the bound.
 \end{itemize}
 
-\smallskip
-\noindent\emph{Condition number verification.}
-The yeti refinement sweep provides a clean quantitative test ($K=21$ fixed):
-unpreconditioned CG iterations increase from $62$ at $r=1$ ($N=1\,536$) to
-$864$ at $r=5$ ($N=347\,136$), a factor of $14.2\times$, consistent with the
-predicted $\sqrt{226}=15.0\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N/K$).
-IETI-DP iterations grow from $14$ at $r=2$ to $17$ at $r=4$: the
-bound~\eqref{eq:kappa-ieti} predicts a ratio
-$\sqrt{(1+\tfrac{1}{2}\ln(N_4/K))^{2}/(1+\tfrac{1}{2}\ln(N_2/K))^{2}}
-= (5.17/3.81) = 1.36$ at most; the observed ratio is $17/14=1.21\times$,
-consistent with the bound.
-For the teapot ($K=32$ fixed), IETI-DP iterations grow from $19$ at $r=2$
-($N=750$) to $38$ at $r=6$ ($N=134\,550$): the bound predicts
-$(1+\ln\sqrt{N_6/K})/(1+\ln\sqrt{N_2/K})=(5.17/2.58)=2.00\times$ growth at
-most; the observed factor is $38/19=2.00\times$, confirming the bound is
-tight in this case.
+% \smallskip
+% \noindent\emph{Condition number verification.}
+% The yeti refinement sweep provides a clean quantitative test ($K=21$ fixed):
+% unpreconditioned CG iterations increase from $62$ at $r=1$ ($N=1\,536$) to
+% $864$ at $r=5$ ($N=347\,136$), a factor of $14.2\times$, consistent with the
+% predicted $\sqrt{226}=15.0\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N/K$).
+% IETI-DP iterations grow from $14$ at $r=2$ to $17$ at $r=4$: the
+% bound~\eqref{eq:kappa-ieti} predicts a ratio
+% $\sqrt{(1+\tfrac{1}{2}\ln(N_4/K))^{2}/(1+\tfrac{1}{2}\ln(N_2/K))^{2}}
+% = (5.17/3.81) = 1.36$ at most; the observed ratio is $17/14=1.21\times$,
+% consistent with the bound.
+% For the teapot ($K=32$ fixed), IETI-DP iterations grow from $19$ at $r=2$
+% ($N=750$) to $38$ at $r=6$ ($N=134\,550$): the bound predicts
+% $(1+\ln\sqrt{N_6/K})/(1+\ln\sqrt{N_2/K})=(5.17/2.58)=2.00\times$ growth at
+% most; the observed factor is $38/19=2.00\times$, confirming the bound is
+% tight in this case.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Two-dimensional benchmark: yeti domain}
