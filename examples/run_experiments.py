@@ -40,12 +40,49 @@ Usage
 
 Default domain is ``teapot`` for backward compatibility.
 Re-running ``run`` overwrites results_{domain}.json; ``plot`` only needs the JSON.
+
+Timings
+-------
+Each configuration is run N_REPEATS=5 times.  The JSON stores per-method *means*
+of setup and solve time together with their standard deviations (``*_std`` keys)
+and all raw repetition records (``runs`` list) for later variance analysis.
+Iteration counts are also stored as means (they are deterministic so std ≈ 0).
+
+Figures
+-------
+All sweeps are plotted with N (number of coupled DOFs) on the x-axis in log scale
+so that asymptotic slopes are visible (log-log for times, semilog-x for iterations).
+Separate *iters_vs_* figures are saved for each sweep showing iteration counts vs N.
+
+Theoretical scalings (2-D surface problems)
+--------------------------------------------
+Refinement sweep  (fixed degree p, mesh size h -> 0,  N ~ h^{-2}):
+
+  CG (no prec):        kappa ~ h^{-2} ~ N       iters ~ N^{1/2}    time ~ N^{3/2}
+  CG + Jacobi:         same asymptotics, better constant
+  CG + symm. GS:       same asymptotics, better constant than Jacobi
+  CG + Multigrid:      kappa ~ O(1)  (mesh-independent)  iters ~ O(1)   time ~ O(N)
+  IETI-DP:             kappa ~ (1 + log(H/h))^2 ~ log(N)^2
+                       iters ~ O(log N)         time ~ O(N log N)
+
+Degree sweep  (fixed h, polynomial degree p -> inf,  N ~ p^2):
+
+  CG (no prec):        kappa grows super-algebraically in p
+  CG + Multigrid:      not p-robust -- deteriorates with p
+  IETI-DP:             kappa ~ O(p^3);  primal space must cover vertex dofs
+
+Subdomain sweep  (fixed p, h per patch;  K ~ 4^splits subdomains):
+
+  CG + Multigrid:      governed by global N_total
+  IETI-DP:             kappa ~ (1 + log(H/h))^2  improves as K grows (H decreases)
 """
 
 import argparse
 import json
+import math
 import os
 import re
+import statistics
 import subprocess
 import sys
 import time
@@ -73,11 +110,11 @@ COMMON_ARGS = ["--Solvers", "CG,Multigrid", "--Preconditioners", "no prec,Jacobi
 DOMAINS = {
     "teapot": dict(
         geometry=TEAPOT,
-        reference=dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=3),
+        reference=dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=4),
         plan=dict(
-            refinement=[dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4, 5, 6)],
-            degree    =[dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
-            splitpatches=[dict(geometry=TEAPOT, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
+            refinement   =[dict(geometry=TEAPOT, splitpatches=0, degree=2, refinements=r) for r in (2, 3, 4, 5, 6)],
+            degree       =[dict(geometry=TEAPOT, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
+            splitpatches =[dict(geometry=TEAPOT, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2, 3, 4)],
         ),
         results_json=os.path.join(HERE, "results_teapot.json"),
         fig_prefix="",
@@ -85,11 +122,11 @@ DOMAINS = {
     ),
     "yeti": dict(
         geometry=YETI,
-        reference=dict(geometry=YETI, splitpatches=0, degree=2, refinements=2),
+        reference=dict(geometry=YETI, splitpatches=0, degree=2, refinements=4),
         plan=dict(
-            refinement=[dict(geometry=YETI, splitpatches=0, degree=2, refinements=r) for r in (1, 2, 3, 4, 5, 6)],
-            degree    =[dict(geometry=YETI, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
-            splitpatches=[dict(geometry=YETI, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2)],
+            refinement   =[dict(geometry=YETI, splitpatches=0, degree=2, refinements=r) for r in (2, 3, 4, 5, 6)],
+            degree       =[dict(geometry=YETI, splitpatches=0, degree=p, refinements=2) for p in (1, 2, 3, 4, 5, 6)],
+            splitpatches =[dict(geometry=YETI, splitpatches=sp, degree=2, refinements=2) for sp in (0, 1, 2, 3, 4)],
         ),
         results_json=os.path.join(HERE, "results_yeti.json"),
         fig_prefix="yeti_",
@@ -148,12 +185,43 @@ def parse_output(text):
     return rec
 
 
-# Fixed thread count for every run, so the comparison is "this 12-core machine".
-# Timings are taken as the MIN over a few repeats: the true compute time is a
-# lower bound that transient OS/CPU contention can only inflate, so the minimum
-# is the least-contaminated estimate (and the iteration counts are deterministic).
+# ---------------------------------------------------------------------------
+# Running
+# ---------------------------------------------------------------------------
+# Fixed thread count for every run.  Timings are taken as the MEAN over
+# N_REPEATS=5 repeats; standard deviations are saved for later analysis but
+# are not plotted.  Iteration counts are deterministic so their std will be 0.
 N_THREADS = "12"
-N_REPEATS = 3
+N_REPEATS = 5
+
+
+def compute_mean_rec(all_recs):
+    """Average timing/iteration fields across repeated runs."""
+    out = {k: all_recs[0].get(k) for k in (
+        "dofs", "npatches", "asm_time",
+        "ieti_lagrange", "ieti_primal", "ieti_solves")}
+    out["methods"] = {}
+    method_names = {name for r in all_recs for name in r.get("methods", {})}
+    for name in method_names:
+        vals = [r["methods"][name] for r in all_recs if name in r.get("methods", {})]
+        if not vals:
+            continue
+        n = len(vals)
+        setup_vals = [v["setup"] for v in vals]
+        solve_vals = [v["solve"] for v in vals]
+        iters_list = [v["iters"] for v in vals if v.get("iters") is not None]
+        out["methods"][name] = {
+            "setup":      sum(setup_vals) / n,
+            "setup_std":  statistics.stdev(setup_vals) if n > 1 else 0.0,
+            "solve":      sum(solve_vals) / n,
+            "solve_std":  statistics.stdev(solve_vals) if n > 1 else 0.0,
+            "iters":      (sum(iters_list) / len(iters_list) if iters_list else None),
+            "iters_std":  (statistics.stdev(iters_list) if len(iters_list) > 1 else 0.0)
+                          if iters_list else None,
+            "l2":         vals[0]["l2"],
+            "converged":  vals[0]["converged"],
+        }
+    return out
 
 
 def run_one(geometry, splitpatches, degree, refinements, timeout=600, extra=None):
@@ -165,37 +233,39 @@ def run_one(geometry, splitpatches, degree, refinements, timeout=600, extra=None
     label = f"{os.path.basename(geometry)} sp={splitpatches} p={degree} r={refinements}"
     print(f"  running {label} (x{N_REPEATS}) ...", flush=True)
 
-    best = None
-    for _ in range(N_REPEATS):
+    all_recs = []
+    for rep in range(N_REPEATS):
         t0 = time.time()
         try:
             out = subprocess.run(args, capture_output=True, text=True,
                                  timeout=timeout, env=env).stdout
         except subprocess.TimeoutExpired:
-            print(f"    TIMEOUT after {timeout}s", flush=True)
+            print(f"    TIMEOUT after {timeout}s (rep {rep+1})", flush=True)
             return dict(geometry=os.path.basename(geometry), splitpatches=splitpatches,
-                        degree=degree, refinements=refinements, timed_out=True, methods={})
+                        degree=degree, refinements=refinements, timed_out=True,
+                        methods={}, runs=[])
+        except FileNotFoundError:
+            # Binary may be momentarily unavailable (rebuild in progress); retry once.
+            time.sleep(5)
+            out = subprocess.run(args, capture_output=True, text=True,
+                                 timeout=timeout, env=env).stdout
         rec = parse_output(out)
         rec["wall"] = round(time.time() - t0, 1)
-        if best is None:
-            best = rec
-        else:
-            # keep the per-method minimum setup and solve across repeats
-            for name, m in rec["methods"].items():
-                if name in best["methods"]:
-                    best["methods"][name]["setup"] = min(best["methods"][name]["setup"], m["setup"])
-                    best["methods"][name]["solve"] = min(best["methods"][name]["solve"], m["solve"])
-                else:
-                    best["methods"][name] = m
+        all_recs.append(rec)
 
-    best.update(geometry=os.path.basename(geometry), splitpatches=splitpatches,
-                degree=degree, refinements=refinements, timed_out=False)
-    ieti = best["methods"].get("IETI-DP (CG on Schur)", {})
-    mg = best["methods"].get("CG + multigrid", {})
-    cg_no = best["methods"].get("CG + no prec", {})
-    print(f"    dofs={best['dofs']} patches={best['npatches']} "
-          f"IETI={ieti.get('solve')} MG={mg.get('solve')} CG_no={cg_no.get('solve')}", flush=True)
-    return best
+    mean_rec = compute_mean_rec(all_recs)
+    mean_rec.update(geometry=os.path.basename(geometry), splitpatches=splitpatches,
+                    degree=degree, refinements=refinements, timed_out=False)
+    mean_rec["runs"] = all_recs  # all 5 raw records for later variance analysis
+
+    ieti  = mean_rec["methods"].get("IETI-DP (CG on Schur)", {})
+    mg    = mean_rec["methods"].get("CG + multigrid", {})
+    cg_no = mean_rec["methods"].get("CG + no prec", {})
+    _fmt = lambda v: f"{v:.3f}" if v is not None else "N/A"
+    print(f"    dofs={mean_rec['dofs']} patches={mean_rec['npatches']} "
+          f"IETI={_fmt(ieti.get('solve'))} MG={_fmt(mg.get('solve'))} "
+          f"CG_no={_fmt(cg_no.get('solve'))}", flush=True)
+    return mean_rec
 
 
 # ---------------------------------------------------------------------------
@@ -214,17 +284,54 @@ def collect(cfg):
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
-def _series(records, xkey, method):
-    xs, solve, total = [], [], []
+def _series(records, method, xkey="dofs"):
+    """Extract (x, solve_time, total_time, iters) for one method across records."""
+    xs, solve, total, iters_list = [], [], [], []
     for r in records:
-        if r.get("timed_out") or method not in r["methods"]:
+        if r.get("timed_out") or method not in r.get("methods", {}):
             continue
-        xs.append(r[xkey])
-        s = r["methods"][method]["solve"]
-        setup = r["methods"][method]["setup"]
-        solve.append(s)
-        total.append(s + setup)
-    return xs, solve, total
+        x_val = r.get(xkey)
+        if x_val is None:
+            continue
+        xs.append(x_val)
+        m = r["methods"][method]
+        solve.append(m["solve"])
+        total.append(m["solve"] + m["setup"])
+        iters_list.append(m.get("iters"))
+    return xs, solve, total, iters_list
+
+
+_SLOPE_COLOR = "darkorange"
+
+def _slope_line(ax, slope, label, xs_data, ys_data,
+                y_frac=0.12, x_margin=0.06):
+    """Draw a reference-slope segment spanning the full x-range with small margins.
+
+    The line starts at x_margin (fraction of log-range) from the left edge and
+    ends at x_margin from the right edge.  y_frac sets the vertical position of
+    the line's left endpoint relative to the data's log y-range.
+    """
+    xs_pos = [x for x in xs_data if x and x > 0]
+    ys_pos = [y for y in ys_data if y and y > 0]
+    if not xs_pos or not ys_pos:
+        return
+    lx_min, lx_max = math.log10(min(xs_pos)), math.log10(max(xs_pos))
+    ly_min, ly_max = math.log10(min(ys_pos)), math.log10(max(ys_pos))
+    lx_span = lx_max - lx_min
+    lx0 = lx_min + x_margin * lx_span
+    lx1 = lx_max - x_margin * lx_span
+    if lx1 <= lx0:
+        return
+    ly0 = ly_min + y_frac * (ly_max - ly_min)
+    ly1 = ly0 + slope * (lx1 - lx0)
+    # skip if line exits the data range vertically
+    if ly1 > ly_max + 0.6 or ly1 < ly_min - 0.6:
+        return
+    ax.plot([10**lx0, 10**lx1], [10**ly0, 10**ly1], '-',
+            color=_SLOPE_COLOR, lw=1.1, alpha=0.55, zorder=0)
+    ax.annotate(label, xy=(10**lx1, 10**ly1), xytext=(4, 0),
+                textcoords='offset points', fontsize=7, color=_SLOPE_COLOR,
+                va='center', alpha=0.9)
 
 
 def plot(cfg):
@@ -245,44 +352,93 @@ def plot(cfg):
         ("Multigrid (standalone)",  "p-.", "#27ae60", "Multigrid alone"),
     ]
 
-    sweep_meta = {
-        "refinement":   ("refinements", "uniform refinement level $r$ (mesh resolution per patch)"),
-        "degree":       ("degree",      "local polynomial degree $p$"),
-        "splitpatches": ("splitpatches", "uniform splits (number of subdomains $\\propto 4^{\\,\\mathrm{splits}}$)"),
+    # Reference slopes: (label, exponent, y_frac).
+    # y_frac positions the line's left endpoint in the data's log y-range [0=bottom, 1=top].
+    # All lines span the full x-range (minus a small margin) and use _SLOPE_COLOR.
+    SLOPE_REFS = {
+        "refinement": {
+            "time":  [("$\\propto N$",       1.0, 0.08),
+                      ("$\\propto N^{3/2}$", 1.5, 0.32)],
+            "iters": [("$\\propto N^0$",     0.0, 0.10),
+                      ("$\\propto N^{1/2}$", 0.5, 0.52)],
+        },
+        "degree": {
+            "time":  [("$\\propto N$",       1.0, 0.04),
+                      ("$\\propto N^2$",     2.0, 0.30),
+                      ("$\\propto N^3$",     3.0, 0.60)],
+            "iters": [("$\\propto N^{1/2}$", 0.5, 0.15),
+                      ("$\\propto N^{3/2}$", 1.5, 0.62)],
+        },
+        "splitpatches": {
+            "time":  [("$\\propto N$",       1.0, 0.08),
+                      ("$\\propto N^2$",     2.0, 0.38)],
+            "iters": [("$\\propto N^0$",     0.0, 0.10),
+                      ("$\\propto N^{1/2}$", 0.5, 0.52)],
+        },
     }
 
-    for sweep, (xkey, xlabel) in sweep_meta.items():
+    sweeps = ["refinement", "degree", "splitpatches"]
+
+    for sweep in sweeps:
+        if sweep not in results.get("sweeps", {}):
+            continue
         recs = results["sweeps"][sweep]
 
+        # ---- solve-time figure: log-log, x = N (DOFs) ----
         fig, ax = plt.subplots(figsize=(7, 5))
-
+        all_xs, all_ys = [], []
         for method_name, style, color, label in METHODS:
-            xs, solve, total = _series(recs, xkey, method_name)
+            xs, solve, _, _ = _series(recs, method_name, xkey="dofs")
             if not xs:
                 continue
             ax.plot(xs, solve, style, color=color, label=label)
-
+            all_xs.extend(xs)
+            all_ys.extend(solve)
+        ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel("solve time [s]")
-        # ax.set_title("Solve time")
+        ax.set_xlabel("number of DOFs $N$")
+        ax.set_ylabel("solve time [s]  (mean of 5 runs)")
         ax.grid(True, which="both", ls=":", alpha=0.5)
         ax.legend(fontsize="small")
-
-        xs_all = set()
-        for method_name, _, _, _ in METHODS:
-            xs, _, _ = _series(recs, xkey, method_name)
-            xs_all.update(xs)
-        if xs_all:
-            ax.set_xticks(sorted(xs_all))
-
-        # fig.suptitle(f"{cfg['title']}: Solver Comparison, sweep over {sweep}")
+        for lbl, exp, yf in SLOPE_REFS.get(sweep, {}).get("time", []):
+            _slope_line(ax, exp, lbl, all_xs, all_ys, yf)
         fig.tight_layout()
         path = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}time_vs_{sweep}.pdf")
         fig.savefig(path)
         fig.savefig(path.replace(".pdf", ".png"), dpi=140)
         plt.close(fig)
         print(f"wrote {path}")
+
+        # ---- iteration-count figure: log-log, x = N (DOFs) ----
+        fig2, ax2 = plt.subplots(figsize=(7, 5))
+        has_data = False
+        all_xs2, all_ys2 = [], []
+        for method_name, style, color, label in METHODS:
+            xs, _, _, iters_list = _series(recs, method_name, xkey="dofs")
+            valid = [(x, it) for x, it in zip(xs, iters_list)
+                     if it is not None and it > 0]
+            if not valid:
+                continue
+            xi, yi = zip(*valid)
+            ax2.plot(xi, yi, style, color=color, label=label)
+            all_xs2.extend(xi)
+            all_ys2.extend(yi)
+            has_data = True
+        if has_data:
+            ax2.set_xscale("log")
+            ax2.set_yscale("log")
+            ax2.set_xlabel("number of DOFs $N$")
+            ax2.set_ylabel("iteration count (mean of 5 runs)")
+            ax2.grid(True, which="both", ls=":", alpha=0.5)
+            ax2.legend(fontsize="small")
+            for lbl, exp, yf in SLOPE_REFS.get(sweep, {}).get("iters", []):
+                _slope_line(ax2, exp, lbl, all_xs2, all_ys2, yf)
+            fig2.tight_layout()
+            path2 = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}iters_vs_{sweep}.pdf")
+            fig2.savefig(path2)
+            fig2.savefig(path2.replace(".pdf", ".png"), dpi=140)
+            print(f"wrote {path2}")
+        plt.close(fig2)
 
     print("done plotting")
 

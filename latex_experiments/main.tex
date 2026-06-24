@@ -682,11 +682,11 @@ bound~\cite[Cor.~6.33]{saad2003iterative} reduces to the CG bound~\cite[Thm.~6.2
 giving the same $O\!\left((N/K)^{1/2}\right)$ iteration count and $O\!\left(N^{3/2}/K^{1/2}\right)$
 total cost. The condition number and degree scaling are identical to the CG case.
 
-\paragraph{Geometric multigrid.}
+\paragraph{Multigrid.}\mg{Check this ...}
 Under standard elliptic regularity a $V$-cycle with one pre- and one
 post-smoothing step yields a mesh-independent contraction factor, giving
 $\kappa(M_{\mathrm{MG}}^{-1}A)=O(1)$ and hence $O(1)$ CG
-iterations~\cite[Ch.~7]{hackbusch1994iterative},~\cite[Ch.~2]{trottenberg2000multigrid}.
+iterations~\cite[Ch.~7]{hackbusch1994iterative},~\cite[\S2.3]{trottenberg2000multigrid}.
 The total solve cost is therefore $O(N)$, which is optimal for this class of
 problem.
 This estimate requires standard elliptic regularity on a flat (Euclidean)
@@ -695,64 +695,32 @@ mesh-independent, and iteration counts may grow with $N$ (see
 Section~\ref{subsubsec:bench-3d-sweeps}).
 This $h$-robustness does \emph{not} carry over to degree elevation:
 standard point smoothers are not $p$-robust in IGA and the iteration count
-grows with $p$~\cite{tielen2020pmultigrid}.
+grows with $p$~\cite[\S5]{tielen2020pmultigrid}.
 
 \paragraph{IETI-DP with scaled Dirichlet preconditioner.}
-IETI-DP has two complementary strengths that make it the method of choice
-for multi-RHS and large-scale problems: a quasi-optimal spectral bound and
-an embarrassingly parallel structure (Remark~\ref{rmk:schur-cost}).
 The spectral bound for the preconditioned interface
-system~\eqref{eq:ieti-schur}--\eqref{eq:scaled-dirichlet} is the
-isogeometric analogue of the classical FETI-DP estimate
-\cite[\S4.4]{kleiss2012ieti}, \cite[Ch.~6]{pechstein2013finite}:
+system~\eqref{eq:ieti-schur}--\eqref{eq:scaled-dirichlet}
+\cite[\S4.4]{kleiss2012ieti}, \cite[Ch.~6]{pechstein2013finite} is:
 \begin{equation}
   \kappa\!\left(M_{sD}^{-1}F\right)
   \;\leq\; C\,\bigl(1+\log(H/h)\bigr)^{2},
   \label{eq:kappa-ieti}
 \end{equation}
 where $C>0$ is independent of $h$, $H$, $K$, and $N$.
-Two features of this bound are decisive.
-First, it is \emph{independent of the number of subdomains $K$}: adding
-more subdomains does not increase the iteration count, unlike unpreconditioned
-CG where $\kappa(A_h)\sim N/K$ grows with refinement.
-Second, it grows only as $O(\log^2 N)$ under mesh refinement, which is
-quasi-optimal.
 Three consequences govern the parameter sweeps.
 \begin{itemize}
-  \item[(i)] \textbf{Refinement sweep} ($K$ fixed, $h\to 0$):
-    $H/h\sim(N/K)^{1/2}$, so~\eqref{eq:kappa-ieti} gives
-    $\kappa\leq C\,\bigl(1+\tfrac{1}{2}\ln(N/K)\bigr)^{2}=O(\log^{2}N)$
-    and the CG iteration count on~\eqref{eq:ieti-schur} grows as $O(\log N)$.
-    With direct local solvers (banded Cholesky, bandwidth $O(p\,n_k^{1/2})$),
-    each CG step requires $K$ back-solves at cost $O(p\,n_k^{3/2})$ each,
-    giving serial per-iteration cost $O(p\,N^{3/2}K^{-1/2})$ and serial total
-    solve cost $O(p\,N^{3/2}K^{-1/2}\log N)$.
-    On $K$ processors these reduce to $O(p\,n_k^{3/2})$ and
-    $O(p\,n_k^{3/2}\log N)$ per processor, respectively.
-    When $K=\Theta(N)$ the serial cost is $O(N\log N)$, essentially linear;
-    for fixed $K$ the asymptotic serial cost is $O(N^{3/2}\log N)$, but the
-    logarithmic iteration count keeps IETI-DP competitive with multigrid
-    at moderate $N$.
-  \item[(ii)] \textbf{Subdomain sweep} ($h$ and $p$ fixed per patch; $K$
-    grows): since $H$ and $h$ both scale as $K^{-1/2}$ when per-patch
-    refinement is held fixed, the ratio $H/h\approx\sqrt{N/K}$ is nearly
-    constant and~\eqref{eq:kappa-ieti} predicts roughly constant spectral
-    conditioning.
-    In practice iteration counts grow moderately
-    (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps}),
-    likely because the primal constraint space does not automatically include
-    the new cross-points created by patch splitting.
-    The dominant serial cost driver is algebraic: each CG step requires $K$
-    local back-solves and the Lagrange multiplier system grows with $K$.
-    With $K$ processors this cost per step stays $O(p\,n_k^{3/2})$.
-  \item[(iii)] \textbf{Degree sweep} ($h$ fixed, $p\to\infty$): the
-    constant $C$ in~\eqref{eq:kappa-ieti} grows algebraically as
-    $O(p^{3})$~\cite[\S4.4]{kleiss2012ieti}, far milder than the
-    super-algebraic growth $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$ for unpreconditioned
-    methods~\cite[Thm.~4.8]{gahalaut2019condition}.
-    Empirically the IETI-DP iteration count increases by approximately one
-    step per unit increase in $p$, well below the $O(p^{3/2})$ implied by
-    the bound.
+  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(N/K)^{1/2}$
+    gives $\kappa=O(\log^{2}N)$ and $O(\log N)$ CG iterations.
+    With direct local solvers the serial total cost is
+    $O(N^{3/2}K^{-1/2}\log N)$.
+  \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h$ stays
+    roughly constant as $K$ grows, so~\eqref{eq:kappa-ieti} predicts
+    near-constant conditioning; in practice iteration counts grow
+    moderately (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps}).
+  \item[(iii)] \textbf{Degree} ($h$ fixed): $C=O(p^{3})$~\cite[\S4.4]{kleiss2012ieti},
+    algebraic growth far milder than the super-algebraic
+    $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$ for unpreconditioned
+    CG~\cite[Thm.~4.8]{gahalaut2019condition}.
 \end{itemize}
 
 % \smallskip
@@ -849,8 +817,8 @@ setup cost would also reduce proportionally.
 
 \subsubsection{Parameter studies} \label{subsubsec:bench-2d-sweeps}
 
-Figures~\ref{fig:yeti-sweep-refinement}--\ref{fig:yeti-sweep-splitpatches} show
-solve times as each discretization parameter is varied around the reference case.
+Figure~\ref{fig:yeti-sweeps} shows solve times and iteration counts as each
+discretization parameter is varied around the reference case.
 All measurements are single-processor; the parallel advantage of IETI-DP
 (Remark~\ref{rmk:schur-cost}) is not reflected in these serial timings.
 
@@ -858,57 +826,52 @@ All measurements are single-processor; the parallel advantage of IETI-DP
     \centering
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/yeti_time_vs_refinement.pdf}
-        \caption{Mesh resolution $r$, at $\npatch = 21$, $p = 2$.}
-        \label{fig:yeti-sweep-refinement}
+        \caption{Solve time, varying $r$ ($\npatch=21$, $p=2$).}
+        \label{fig:yeti-time-r}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.46\textwidth}
-        \includegraphics[width=\textwidth]{figures/yeti_time_vs_degree.pdf}
-        \caption{Polynomial degree $p$, at $\npatch = 21$, $r = 2$.}
-        \label{fig:yeti-sweep-degree}
-    \end{subfigure}
-    \par\medskip
-    \begin{subfigure}[b]{0.46\textwidth}
-        \includegraphics[width=\textwidth]{figures/yeti_time_vs_splitpatches.pdf}
-        \caption{Number of subdomains $K$, at $p = 2$, $r = 2$.}
-        \label{fig:yeti-sweep-splitpatches}
-    \end{subfigure}
-    \caption{Yeti domain: solve times as each discretization parameter is varied around
-    the reference case ($\npatch = 21$, $p = 2$, $r = 2$).}
-    \label{fig:yeti-sweeps}
-\end{figure}
-
-\begin{figure}[!ht]
-    \centering
-    \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/yeti_iters_vs_refinement.pdf}
-        \caption{Mesh resolution $r$, at $\npatch = 21$, $p = 2$.}
-        \label{fig:yeti-sweep-iters-refinement}
+        \caption{Iterations, varying $r$ ($\npatch=21$, $p=2$).}
+        \label{fig:yeti-iters-r}
+    \end{subfigure}
+    \par
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_time_vs_degree.pdf}
+        \caption{Solve time, varying $p$ ($\npatch=21$, $r=2$).}
+        \label{fig:yeti-time-p}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/yeti_iters_vs_degree.pdf}
-        \caption{Polynomial degree $p$, at $\npatch = 21$, $r = 2$.}
-        \label{fig:yeti-sweep-iters-degree}
+        \caption{Iterations, varying $p$ ($\npatch=21$, $r=2$).}
+        \label{fig:yeti-iters-p}
     \end{subfigure}
-    \par\medskip
+    \par
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/yeti_time_vs_splitpatches.pdf}
+        \caption{Solve time, varying $K$ ($p=2$, $r=2$).}
+        \label{fig:yeti-time-K}
+    \end{subfigure}
+    \hfill
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/yeti_iters_vs_splitpatches.pdf}
-        \caption{Number of subdomains $K$, at $p = 2$, $r = 2$.}
-        \label{fig:yeti-sweep-iters-splitpatches}
+        \caption{Iterations, varying $K$ ($p=2$, $r=2$).}
+        \label{fig:yeti-iters-K}
     \end{subfigure}
-    \caption{Yeti domain: iteration counts as each discretization parameter is varied
-    around the reference case ($\npatch = 21$, $p = 2$, $r = 2$).}
-    \label{fig:yeti-sweeps-iters}
+    \caption{Yeti domain: solve time (left) and iteration count (right) as each
+    discretization parameter is varied around the reference case ($\npatch = 21$,
+    $p = 2$, $r = 2$).}
+    \label{fig:yeti-sweeps}
 \end{figure}
 
-\emph{(i)~Mesh resolution} (Figures~\ref{fig:yeti-sweep-refinement},
-\ref{fig:yeti-sweep-iters-refinement}):
+\emph{(i)~Mesh resolution} (Figures~\ref{fig:yeti-time-r},
+\ref{fig:yeti-iters-r}):
 IETI-DP leads at every refinement level, with a $5.4$--$6.3\times$ advantage
 for $r=2$--$4$ (e.g.\ $6.3\times$ at $r=4$: $0.14\,$s vs.\ $0.87\,$s)
 before narrowing to $3.3\times$ at $r=5$ ($N=347\,136$).
 Multigrid iteration counts remain nearly constant at $11$--$14$
-(Figure~\ref{fig:yeti-sweep-iters-refinement}), confirming $h$-robustness on
+(Figure~\ref{fig:yeti-iters-r}), confirming $h$-robustness on
 the flat domain.
 IETI-DP iterations grow mildly from $14$ at $r=2$ to $17$ at $r=4$, well
 within the $O(\log N)$ bound~\eqref{eq:kappa-ieti} (see condition number
@@ -916,8 +879,8 @@ verification in Section~\ref{subsec:theory}).
 The narrowing advantage at $r=5$ reflects the asymptotic dominance of
 IETI-DP's $O(N^{3/2}/K^{1/2})$ per-iteration cost over multigrid's $O(N)$.
 
-\emph{(ii)~Polynomial degree} (Figures~\ref{fig:yeti-sweep-degree},
-\ref{fig:yeti-sweep-iters-degree}):
+\emph{(ii)~Polynomial degree} (Figures~\ref{fig:yeti-time-p},
+\ref{fig:yeti-iters-p}):
 IETI-DP leads at every $p$, with the gap accelerating from $6\times$ at $p=1$
 to $97\times$ at $p=6$ ($0.009\,$s vs.\ $0.91\,$s).
 The widening is driven entirely by multigrid smoother deterioration: CG+multigrid
@@ -926,8 +889,8 @@ to only $18$---roughly one additional iteration per unit increase in $p$, far
 milder than the $O(p^{3/2})$ that the $O(p^3)$ bound on $C$
 in~\eqref{eq:kappa-ieti} would imply~\cite{kleiss2012ieti}.
 
-\emph{(iii)~Number of subdomains} (Figures~\ref{fig:yeti-sweep-splitpatches},
-\ref{fig:yeti-sweep-iters-splitpatches}):
+\emph{(iii)~Number of subdomains} (Figures~\ref{fig:yeti-time-K},
+\ref{fig:yeti-iters-K}):
 IETI-DP leads for $K\leq 336$ ($5.3\times$ at $K=21$, $1.6\times$ at $K=336$)
 and falls behind at $K=1344$ (multigrid $2.3\times$ faster) and $K=5376$
 (multigrid $6\times$ faster, $0.65\,$s vs.\ $3.85\,$s).
@@ -1020,8 +983,8 @@ dominates the savings.
 
 \subsubsection{Parameter studies} \label{subsubsec:bench-3d-sweeps}
 
-Figures~\ref{fig:sweep-refinement}--\ref{fig:sweep-splitpatches} record solve
-times as each parameter is varied (all single-processor).
+Figure~\ref{fig:teapot-sweeps} records solve times and iteration counts as each
+parameter is varied (all single-processor).
 The solve phase is the target of the neural
 operator~\eqref{eq:neural-schur}, which replaces one Schur-complement action
 per PCG iteration.
@@ -1030,57 +993,52 @@ per PCG iteration.
     \centering
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/time_vs_refinement.pdf}
-        \caption{Mesh resolution $r$, at $\npatch = 32$, $p = 2$.}
-        \label{fig:sweep-refinement}
+        \caption{Solve time, varying $r$ ($\npatch=32$, $p=2$).}
+        \label{fig:teapot-time-r}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.46\textwidth}
-        \includegraphics[width=\textwidth]{figures/time_vs_degree.pdf}
-        \caption{Polynomial degree $p$, at $\npatch = 32$, $r = 2$.}
-        \label{fig:sweep-degree}
-    \end{subfigure}
-    \par\medskip
-    \begin{subfigure}[b]{0.46\textwidth}
-        \includegraphics[width=\textwidth]{figures/time_vs_splitpatches.pdf}
-        \caption{Number of subdomains, at $p = 2$, $r = 2$.}
-        \label{fig:sweep-splitpatches}
-    \end{subfigure}
-    \caption{Teapot surface: solve times as each discretization parameter is varied
-    around the reference case ($\npatch = 32$, $p = 2$, $r = 2$).}
-    \label{fig:sweeps}
-\end{figure}
-
-\begin{figure}[!ht]
-    \centering
-    \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/iters_vs_refinement.pdf}
-        \caption{Mesh resolution $r$, at $\npatch = 32$, $p = 2$.}
-        \label{fig:sweep-iters-refinement}
+        \caption{Iterations, varying $r$ ($\npatch=32$, $p=2$).}
+        \label{fig:teapot-iters-r}
+    \end{subfigure}
+    \par
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/time_vs_degree.pdf}
+        \caption{Solve time, varying $p$ ($\npatch=32$, $r=2$).}
+        \label{fig:teapot-time-p}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/iters_vs_degree.pdf}
-        \caption{Polynomial degree $p$, at $\npatch = 32$, $r = 2$.}
-        \label{fig:sweep-iters-degree}
+        \caption{Iterations, varying $p$ ($\npatch=32$, $r=2$).}
+        \label{fig:teapot-iters-p}
     \end{subfigure}
-    \par\medskip
+    \par
+    \begin{subfigure}[b]{0.46\textwidth}
+        \includegraphics[width=\textwidth]{figures/time_vs_splitpatches.pdf}
+        \caption{Solve time, varying $K$ ($p=2$, $r=2$).}
+        \label{fig:teapot-time-K}
+    \end{subfigure}
+    \hfill
     \begin{subfigure}[b]{0.46\textwidth}
         \includegraphics[width=\textwidth]{figures/iters_vs_splitpatches.pdf}
-        \caption{Number of subdomains, at $p = 2$, $r = 2$.}
-        \label{fig:sweep-iters-splitpatches}
+        \caption{Iterations, varying $K$ ($p=2$, $r=2$).}
+        \label{fig:teapot-iters-K}
     \end{subfigure}
-    \caption{Teapot surface: iteration counts as each discretization parameter is varied
-    around the reference case ($\npatch = 32$, $p = 2$, $r = 2$).}
-    \label{fig:sweeps-iters}
+    \caption{Teapot surface: solve time (left) and iteration count (right) as each
+    discretization parameter is varied around the reference case ($\npatch = 32$,
+    $p = 2$, $r = 2$).}
+    \label{fig:teapot-sweeps}
 \end{figure}
 
-\emph{(i)~Mesh resolution} (Figures~\ref{fig:sweep-refinement},
-\ref{fig:sweep-iters-refinement}):
+\emph{(i)~Mesh resolution} (Figures~\ref{fig:teapot-time-r},
+\ref{fig:teapot-iters-r}):
 IETI-DP leads at every refinement level, reaching $9.4\times$ at $r=3$
 ($0.0013\,$s vs.\ $0.013\,$s) and sustaining $6$--$11\times$ through $r=6$.
 A key distinction from the flat yeti domain: CG+multigrid iterations on the
 curved teapot surface grow from $23$ at $r=2$ to $117$ at $r=6$
-(Figure~\ref{fig:sweep-iters-refinement}), far from the $O(1)$ prediction for
+(Figure~\ref{fig:teapot-iters-r}), far from the $O(1)$ prediction for
 flat domains (Section~\ref{subsec:theory}).
 Laplace--Beltrami operators on non-flat surfaces can degrade the V-cycle
 contraction factor, explaining why IETI-DP's advantage grows rather than
@@ -1089,17 +1047,17 @@ IETI-DP iterations grow from $19$ at $r=2$ to $38$ at $r=6$, consistent
 with~\eqref{eq:kappa-ieti} (see the condition number verification in
 Section~\ref{subsec:theory}).
 
-\emph{(ii)~Polynomial degree} (Figures~\ref{fig:sweep-degree},
-\ref{fig:sweep-iters-degree}):
+\emph{(ii)~Polynomial degree} (Figures~\ref{fig:teapot-time-p},
+\ref{fig:teapot-iters-p}):
 IETI-DP leads at every $p$; the gap grows from $3.5\times$ at $p=1$ to
 $26\times$ at $p=6$ ($0.007\,$s vs.\ $0.19\,$s).
 CG+multigrid iterations increase from $19$ to $146$ while IETI-DP iterations
-grow from $16$ to only $25$ (Figure~\ref{fig:sweep-iters-degree}), confirming
+grow from $16$ to only $25$ (Figure~\ref{fig:teapot-iters-p}), confirming
 that multigrid smoother deterioration---not the IETI interface problem---drives
 the widening cost gap.
 
-\emph{(iii)~Number of subdomains} (Figures~\ref{fig:sweep-splitpatches},
-\ref{fig:sweep-iters-splitpatches}):
+\emph{(iii)~Number of subdomains} (Figures~\ref{fig:teapot-time-K},
+\ref{fig:teapot-iters-K}):
 IETI-DP leads for $K\leq 2048$: $6.8\times$ at $K=32$, $2.9\times$ at
 $K=128$, $1.7\times$ at $K=512$, and $1.4\times$ at $K=2048$.
 At $K=8192$ the roles reverse: multigrid is $3.1\times$ faster ($15.3\,$s
