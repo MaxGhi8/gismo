@@ -1,0 +1,66 @@
+Run solver_benchmark_example with options:
+Options (21):
+* BoundaryConditions   (string) = d        Boundary conditions
+* Degree                  (int) = 2        Degree of the B-spline discretization space
+* EliminateCorners       (bool) = 0        IETI: eliminate corners (if they are primals)
+* Geometry             (string) = ../../../filedata/ieti_geom/teapot.xml
+                                           Geometry file
+* MG.Cycles               (int) = 1        Number of cycles (1 for V-cycle, 2 for W-cycle)
+* MG.Levels               (int) = 3        Number of multigrid levels (default: = Refinements)
+* MG.PostSmooth           (int) = 1        Number of post-smoothing steps
+* MG.PreSmooth            (int) = 1        Number of pre-smoothing steps
+* MG.Smoother          (string) = GaussSeidel
+                                           Multigrid smoother (Richardson, Jacobi, GaussSeidel, IncompleteLU)
+* Preconditioners      (string) = no prec,Jacobi,symm. Gauss-Seidel
+                                           Preconditioners to try (comma-separated list, e.g. Jacobi,ILU) or 'all'. Available: no prec, Jacobi, Gauss-Seidel, rev. Gauss-Seidel, symm. Gauss-Seidel, Richardson, ILU, multigrid
+* Primals              (string) = c        IETI primal constraints (c=corners, e=edges, f=faces)
+* Refinements             (int) = 3        Number of uniform h-refinement steps to perform before solving
+* SkipIETI_noprec        (bool) = 0        Skip the unpreconditioned IETI-DP variant (CG without scaled-Dirichlet preconditioner)
+* Solver.MaxIterations    (int) = 1000     Maximum iterations for all iterative solvers
+* Solver.Tolerance       (real) = 1e-08    Stopping criterion for all iterative solvers
+* Solvers              (string) = CG,GMRES,Multigrid
+                                           Solvers to try (comma-separated list, e.g. CG,GMRES,MinRes) or 'all'. Available: CG, MinRes, MinRes-QLP, GMRES, BiCGStab, Gradient, Multigrid
+* SplitPatches            (int) = 0        Split every patch that many times in 2^d patches
+* SquareDiscretization (string) = global   Element equalisation: off (native, lightest, conforming inputs only) | global (all patches identical, always safe)
+* StretchGeometry        (real) = 1        Stretch geometry in x-direction by the given factor
+* num_run                 (int) = 10       Number of times every solve is repeated; the reported solve time is the mean over the repeats (setup is measured once)
+* plot                   (bool) = 0        Write geometry, source and solution to Paraview files
+
+Define geometry... (no interfaces registered, computing topology) done.
+Define right-hand-side and boundary conditions... done. 16 boundary conditions set.
+Setup bases and adjust degree... done.
+32 patches (all identical).
+  Patch 0: degree 2x2, knots 13x13, 100 basis functions.
+  Sum over all patches (un-glued, before interface gluing/BC elimination): 3200.
+
+Assemble global system (gsExprAssembler)... done (0.0221684 s, 2502 coupled dofs = global system size solved by direct/CG/multigrid).
+Solve: direct Cholesky... done.
+Setup multigrid (smoother: GaussSeidel)... done.
+Solve: iterative benchmark loop... done.
+Solve: IETI-DP... 
+  IETI sizes: 512 Lagrange multipliers (the CG/Schur system size), 22 primal dofs, 32 local patch solves. done.
+
+=================================== Benchmark results ===================================
+Method                            setup [s]  solve [s]   iters    L2 vs IETI  converged
+-----------------------------------------------------------------------------------------
+Direct (Cholesky)                    0.0222     0.0035       -     8.834e-03        yes
+CG + no prec                         0.0222     0.0113     341     8.834e-03        yes
+CG + Jacobi                          0.0222     0.0092     207     8.834e-03        yes
+CG + symm. Gauss-Seidel              0.0222     0.0323      90     8.834e-03        yes
+GMRES + no prec                      0.0222     0.1381     224     8.834e-03        yes
+GMRES + Jacobi                       0.0222     0.0822     192     8.834e-03        yes
+GMRES + symm. Gauss-Seidel           0.0222     0.0321      80     8.834e-03        yes
+Multigrid (standalone)               0.0243     0.0147      35     8.834e-03        yes
+IETI-DP (CG on Schur)                0.0337     0.0058      22     0.000e+00        yes
+IETI-DP (CG, no prec)                0.0337     0.0095      59     4.387e-08        yes
+=========================================================================================
+Note: 'solve [s]' is the mean over 10 repeats; 'setup [s]' is measured once.
+Note: IETI-DP iterations count CG steps on the Schur complement (a different operator
+      and dimension), so iteration counts are directly comparable only among the
+      global-system solvers.
+      The exact solution u = sin(x)*cos(y) is not valid here (curved surface and/or
+      Neumann data), so no accuracy error is reported. The 'L2 vs IETI' column is the
+      L2 distance of each solution to the IETI-DP solution (the reference, hence 0).
+      The converged solvers sharing one common value confirms they reached the
+      same discrete solution.
+No output created, re-run with --plot to get Paraview files.

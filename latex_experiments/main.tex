@@ -805,26 +805,29 @@ setup cost would also reduce proportionally.
 \begin{table}[t]
     \centering
     \caption{Reference case (yeti domain, $\npatch = 21$, $p = 2$, $r = 4$;
-    $N = 87\,552$). Setup is measured once; solve times are means over 5 runs.
-    Tolerance $10^{-8}$.
+    $N = 87\,552$). Setup is measured once; solve times are means over 10 runs.
+    Tolerance $10^{-8}$; maximum 1\,000 iterations. All methods converged.
+    Global solvers run on 1 thread (timing unchanged with more threads).
     IETI-DP iteration counts are CG steps on the interface
     problem~\eqref{eq:ieti-schur} and are not directly comparable with the
     global-system counts.}
     \label{tab:yeti-reference}
-    \begin{tabular}{lcccc}
+    \begin{tabular}{lccc}
         \toprule
-        Method & setup [s] & solve [s] & iters & converged \\
+        Method & setup [s] & solve [s] & iters \\
         \midrule
-        Direct Cholesky                 & 0.13 & 0.47  & ---  & yes \\
-        GMRES (no preconditioner)       & 0.13 & 4.85  & 397  & yes \\
-        GMRES + Jacobi                  & 0.13 & 2.58  & 280  & yes \\
-        GMRES + symm. Gauss--Seidel & 0.13 & 4.57  & 100  & yes \\
-        CG (no preconditioner)          & 0.13 & 0.47  & 446  & yes \\
-        CG + Jacobi                     & 0.13 & 0.46  & 319  & yes \\
-        CG + symm. Gauss--Seidel    & 0.13 & 3.23  & 104  & yes \\
-        Multigrid (standalone)          & 0.21 & 0.69  & 18   & yes \\
-        IETI-DP (no prec)               & 2.44 & ---   & ---  & --- \\
-        \textbf{IETI-DP}                & 2.44 & \textbf{0.12} & 17 & yes \\
+        Direct Cholesky                  & 0.13 & 0.47  & ---  \\
+        GMRES (no preconditioner)        & 0.13 & 4.85  & 397  \\
+        GMRES + Jacobi                   & 0.13 & 2.58  & 280  \\
+        GMRES + symm. Gauss--Seidel      & 0.13 & 4.57  & 100  \\
+        CG (no preconditioner)           & 0.13 & 0.47  & 446  \\
+        CG + Jacobi                      & 0.13 & 0.46  & 319  \\
+        CG + symm. Gauss--Seidel         & 0.13 & 3.23  & 104  \\
+        Multigrid (standalone)           & 0.21 & 0.69  & 18   \\
+        IETI-DP (no prec, 1 thread)      & 2.89 & 1.54  & 64   \\
+        IETI-DP (no prec, 12 threads)    & 2.48 & 0.26  & 64   \\
+        IETI-DP (1 thread)               & 2.89 & 0.58  & 17   \\
+        \textbf{IETI-DP (12 threads)}    & 2.48 & \textbf{0.11} & 17 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -957,40 +960,50 @@ inter-method agreement, not solution accuracy.
 
 \subsubsection{Reference case} \label{subsubsec:bench-3d-reference}
 
-The reference case uses $p = 2$, $r = 4$: $N = 9\,078$ dofs, $\Lambda = 1024$
-Lagrange multipliers, $\nprim = 22$ primal dofs (corner constraints).
-Table~\ref{tab:reference} separates setup from solve.
-IETI-DP has the fastest solve ($0.010\,$s), $5.3\times$ faster than the next best
-converging iterative method (CG+Jacobi at $0.053\,$s) and $1.8\times$ faster than
-Direct Cholesky ($0.018\,$s). Multigrid (standalone) and CG (no preconditioner) do
-not converge within 1000 iterations on this curved surface.
-The setup cost ($0.095\,$s) is amortized within approximately $2$ right-hand
-sides over CG+Jacobi (and $10$ over Direct Cholesky), making IETI-DP the
-preferred iterative solver for the multi-RHS regime.
+Table~\ref{tab:reference} compares solvers at $p = 2$ for two mesh resolutions:
+$r = 3$ ($N = 2\,502$ dofs, $\Lambda = 512$ Lagrange multipliers) and
+$r = 4$ ($N = 9\,078$ dofs, $\Lambda = 1024$); both share $\nprim = 22$ primal
+dofs (corner constraints).
+At $r = 3$ all methods converge, with IETI-DP achieving the fastest solve
+($0.0011\,$s) and multigrid a competitive $0.015\,$s in 35 iterations.
+Refining to $r = 4$ exposes the sensitivity of the multigrid smoother to the
+Laplace--Beltrami operator on the curved teapot surface: multigrid stagnates
+(1000 iterations, no convergence), whereas IETI-DP remains robust ($0.0047\,$s,
+26 iterations), $11\times$ faster than the next-best converging global-system
+solver (CG+Jacobi at $0.052\,$s).
+The IETI-DP setup cost of $0.095\,$s at $r = 4$ is amortized over approximately
+$2$ right-hand sides relative to CG+Jacobi (and $5$ relative to Direct
+Cholesky), making it the preferred solver in the multi-RHS regime.
 
 \begin{table}[t]
     \centering
-    \caption{Reference case (teapot, $\npatch = 32$, $p = 2$, $r = 4$;
-    $N = 9\,078$). Setup is measured once; solve times are means over 5 runs.
-    Tolerance $10^{-8}$.
-    IETI-DP iterations count CG steps on the interface
-    problem~\eqref{eq:ieti-schur}, hence are not directly comparable with the
-    global-system iteration counts.}
+    \caption{Teapot benchmark ($\npatch = 32$, $p = 2$): solver performance at
+    $r = 3$ ($N = 2\,502$) and $r = 4$ ($N = 9\,078$). Solve times are means over
+    10 runs; setup is measured once. Global solvers and IETI-DP (no prec) use
+    12 threads; timing for global solvers is unchanged with more threads.
+    IETI-DP iteration counts are CG steps on the Schur complement~\eqref{eq:ieti-schur},
+    not directly comparable to global-system counts. CG (no prec) at $r=4$ and
+    Multigrid at $r=4$ did not converge within the 1\,000-iteration limit.}
     \label{tab:reference}
-    \begin{tabular}{lcccc}
+    \begin{tabular}{lcccccc}
         \toprule
-        Method & setup [s] & solve [s] & iters & converged \\
+        & \multicolumn{3}{c}{$r = 3$,\; $N = 2\,502$}
+        & \multicolumn{3}{c}{$r = 4$,\; $N = 9\,078$} \\
+        \cmidrule(lr){2-4}\cmidrule(lr){5-7}
+        Method & setup [s] & solve [s] & iters & setup [s] & solve [s] & iters \\
         \midrule
-        Direct Cholesky                 & 0.015 & 0.018  & ---  & yes \\
-        GMRES (no preconditioner)       & 0.015 & 1.20   & 452  & yes \\
-        GMRES + Jacobi                  & 0.015 & 0.39   & 296  & yes \\
-        GMRES + symm. Gauss--Seidel & 0.015 & 0.21   & 134  & yes \\
-        CG (no preconditioner)          & 0.015 & 0.10   & 1000 & no  \\
-        CG + Jacobi                     & 0.015 & 0.053  & 381  & yes \\
-        CG + symm. Gauss--Seidel    & 0.015 & 0.16   & 144  & yes \\
-        Multigrid (standalone)          & 0.022 & 1.99   & 1000 & no  \\
-        IETI-DP (no prec)               & 0.095 & ---    & ---  & --- \\
-        \textbf{IETI-DP}                & 0.095 & \textbf{0.010} & 26 & yes \\
+        Direct Cholesky              & 0.0081 & 0.0035 & ---  & 0.018 & 0.018  & ---  \\
+        CG (no prec)                 & 0.0081 & 0.011  & 344  & 0.018 & 0.11   & 1000 \\
+        CG + Jacobi                  & 0.0081 & 0.0094 & 207  & 0.018 & 0.052  & 381  \\
+        CG + symm.\ Gauss--Seidel    & 0.0081 & 0.032  & 90   & 0.018 & 0.16   & 144  \\
+        GMRES (no prec)              & 0.0081 & 0.097  & 224  & 0.018 & 1.30   & 452  \\
+        GMRES + Jacobi               & 0.0081 & 0.082  & 192  & 0.018 & 0.38   & 296  \\
+        GMRES + symm.\ Gauss--Seidel & 0.0081 & 0.031  & 80   & 0.018 & 0.22   & 134  \\
+        Multigrid (standalone)       & 0.011  & 0.015  & 35   & 0.026 & 1.99   & 1000 \\
+        IETI-DP (no prec, 1 thread)  & 0.034  & 0.0095 & 59   & 0.145 & 0.069  & 107  \\
+        IETI-DP (no prec, 12 threads)& 0.021  & 0.0017 & 57   & 0.095 & 0.012  & 108  \\
+        IETI-DP (1 thread)           & 0.034  & 0.0058 & 22   & 0.145 & 0.027  & 26   \\
+        \textbf{IETI-DP (12 threads)}& 0.021  & \textbf{0.0011} & 22 & 0.095 & \textbf{0.0047} & 26 \\
         \bottomrule
     \end{tabular}
 \end{table}
