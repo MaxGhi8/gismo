@@ -43,10 +43,11 @@ Re-running ``run`` overwrites results_{domain}.json; ``plot`` only needs the JSO
 
 Timings
 -------
-Each configuration is run N_REPEATS=5 times.  The JSON stores per-method *means*
-of setup and solve time together with their standard deviations (``*_std`` keys)
-and all raw repetition records (``runs`` list) for later variance analysis.
-Iteration counts are also stored as means (they are deterministic so std ≈ 0).
+Each configuration is run N_REPEATS=10 times.  The JSON stores, for each method,
+top-level ``setup`` / ``solve`` / ``iters`` scalars (means, for backward compat)
+plus ``*_stats`` sub-dicts with mean, median, min, max, std, and n for setup, solve,
+total (setup+solve), and iterations.  All raw repetition records are kept under the
+``runs`` key for later variance analysis.
 
 Figures
 -------
@@ -58,10 +59,12 @@ Theoretical scalings (2-D surface problems)
 --------------------------------------------
 Refinement sweep  (fixed degree p, mesh size h -> 0,  N ~ h^{-2}):
 
+  GMRES (no prec):     kappa ~ h^{-2} ~ N       iters ~ N^{1/2}    time ~ N^{3/2}
+  GMRES + Jacobi:      same asymptotics, better constant
+  GMRES + symm. GS:    same asymptotics, better constant than Jacobi
   CG (no prec):        kappa ~ h^{-2} ~ N       iters ~ N^{1/2}    time ~ N^{3/2}
   CG + Jacobi:         same asymptotics, better constant
   CG + symm. GS:       same asymptotics, better constant than Jacobi
-  CG + Multigrid:      kappa ~ O(1)  (mesh-independent)  iters ~ O(1)   time ~ O(N)
   IETI-DP:             kappa ~ (1 + log(H/h))^2 ~ log(N)^2
                        iters ~ O(log N)         time ~ O(N log N)
 
@@ -192,11 +195,29 @@ def parse_output(text):
 # N_REPEATS=5 repeats; standard deviations are saved for later analysis but
 # are not plotted.  Iteration counts are deterministic so their std will be 0.
 N_THREADS = "12"
-N_REPEATS = 5
+N_REPEATS = 10
+
+
+def _stats(vals):
+    """Return a dict of descriptive statistics for a list of floats."""
+    n = len(vals)
+    if n == 0:
+        return {"mean": None, "median": None, "min": None, "max": None,
+                "std": None, "n": 0}
+    mean   = sum(vals) / n
+    median = statistics.median(vals)
+    return {
+        "mean":   mean,
+        "median": median,
+        "min":    min(vals),
+        "max":    max(vals),
+        "std":    statistics.stdev(vals) if n > 1 else 0.0,
+        "n":      n,
+    }
 
 
 def compute_mean_rec(all_recs):
-    """Average timing/iteration fields across repeated runs."""
+    """Aggregate timing/iteration fields across repeated runs."""
     out = {k: all_recs[0].get(k) for k in (
         "dofs", "npatches", "asm_time",
         "ieti_lagrange", "ieti_primal", "ieti_solves")}
@@ -206,20 +227,34 @@ def compute_mean_rec(all_recs):
         vals = [r["methods"][name] for r in all_recs if name in r.get("methods", {})]
         if not vals:
             continue
-        n = len(vals)
         setup_vals = [v["setup"] for v in vals]
         solve_vals = [v["solve"] for v in vals]
+        total_vals = [v["setup"] + v["solve"] for v in vals]
         iters_list = [v["iters"] for v in vals if v.get("iters") is not None]
+        l2_vals    = [v["l2"]    for v in vals if v.get("l2")    is not None]
+        n_conv     = sum(1 for v in vals if v.get("converged"))
+        setup_s = _stats(setup_vals)
+        solve_s = _stats(solve_vals)
+        total_s = _stats(total_vals)
+        iters_s = _stats(iters_list) if iters_list else None
+        l2_s    = _stats(l2_vals)    if l2_vals    else None
         out["methods"][name] = {
-            "setup":      sum(setup_vals) / n,
-            "setup_std":  statistics.stdev(setup_vals) if n > 1 else 0.0,
-            "solve":      sum(solve_vals) / n,
-            "solve_std":  statistics.stdev(solve_vals) if n > 1 else 0.0,
-            "iters":      (sum(iters_list) / len(iters_list) if iters_list else None),
-            "iters_std":  (statistics.stdev(iters_list) if len(iters_list) > 1 else 0.0)
-                          if iters_list else None,
-            "l2":         vals[0]["l2"],
-            "converged":  vals[0]["converged"],
+            # primary scalars (means) kept at top level for backward compat
+            "setup":          setup_s["mean"],
+            "solve":          solve_s["mean"],
+            "iters":          iters_s["mean"] if iters_s else None,
+            "l2":             l2_s["mean"]    if l2_s    else None,
+            "converged":      n_conv == len(vals),
+            # convergence bookkeeping
+            "n_converged":    n_conv,
+            "n_runs":         len(vals),
+            "converge_rate":  n_conv / len(vals),
+            # full stats sub-dicts
+            "setup_stats":    setup_s,
+            "solve_stats":    solve_s,
+            "total_stats":    total_s,
+            "iters_stats":    iters_s,
+            "l2_stats":       l2_s,
         }
     return out
 
