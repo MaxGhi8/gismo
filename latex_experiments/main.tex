@@ -721,7 +721,7 @@ and the dominant per-iteration cost is $O(K\,p\,n_k^{3/2})$ in serial
 and $O(p\,n_k^{3/2})$ on $K$ parallel processors (Remark~\ref{rmk:schur-cost}).
 Three consequences govern the parameter sweeps.
 \begin{itemize}
-  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(N/K)^{1/2}$
+  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(n_k/K)^{1/2}$
     gives $\kappa=O(\log^{2}n_k)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log n_k)$ CG iterations.
   \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h$ stays
     roughly constant as $K$ grows, so~\eqref{eq:kappa-ieti} predicts
