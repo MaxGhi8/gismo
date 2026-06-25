@@ -628,23 +628,22 @@ Table~\ref{tab:theory} summarises the predicted serial and parallel
 
 \begin{table}[h]
   \centering
-  \caption{Predicted asymptotic scaling for the refinement sweep ($K$, $p$ fixed),
-    with $N = K n_k$.
+  \caption{Predicted asymptotic scaling for the refinement sweep.
     $\kappa$: condition number; ``iters'': count to tolerance $\varepsilon$;
     ``serial'': total cost on one processor; ``parallel'': wall-clock cost on
     $K$ processors (one per patch). $p$-dependence absorbed into constants.
     Only IETI-DP is inherently patch-parallel; the remaining solvers act on the assembled global
-    system and are run serially.}
+    system and run serially.}
   \label{tab:theory}
   \begin{tabular}{lcccc}
     \toprule
     Method                         & $\kappa$            & iters              & serial                          & parallel ($K$ procs)     \\
     \midrule
     Direct (Cholesky)              & ---                 & ---                & $O(K^{3/2}n_k^{3/2})$          & ---                      \\
+    GMRES (no preconditioner)         & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
+    GMRES + Jacobi/ symm.\ GS                & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
     CG (no preconditioner)         & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    CG + Jacobi                    & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    CG + symm.\ GS                 & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---                      \\
-    CG + Multigrid                 & $O(1)$              & $O(1)$             & $O(K\,n_k)$                    & ---                      \\
+    CG + Jacobi/ symm.\ GS                & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
     Multigrid (standalone)         & $O(1)$              & $O(1)$             & $O(K\,n_k)$                    & ---                      \\
     IETI-DP                        & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{3/2}\!\log n_k)$   & $O(n_k^{3/2}\!\log n_k)$ \\
     % IETI-DP${}^{\dagger}$          & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{1/2}\!\log n_k)$   & $O(n_k^{1/2}\!\log n_k)$ \\
@@ -723,7 +722,7 @@ and $O(p\,n_k^{3/2})$ on $K$ parallel processors (Remark~\ref{rmk:schur-cost}).
 Three consequences govern the parameter sweeps.
 \begin{itemize}
   \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(N/K)^{1/2}$
-    gives $\kappa=O(\log^{2}N)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log N)$ CG iterations.
+    gives $\kappa=O(\log^{2}n_k)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log n_k)$ CG iterations.
   \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h$ stays
     roughly constant as $K$ grows, so~\eqref{eq:kappa-ieti} predicts
     near-constant conditioning.%; in practice iteration counts grow
@@ -819,10 +818,10 @@ setup cost would also reduce proportionally.
         Direct Cholesky                 & 0.13 & 0.47  & ---  & yes \\
         GMRES (no preconditioner)       & 0.13 & 4.85  & 397  & yes \\
         GMRES + Jacobi                  & 0.13 & 2.58  & 280  & yes \\
-        GMRES + symmetric Gauss--Seidel & 0.13 & 4.57  & 100  & yes \\
+        GMRES + symm. Gauss--Seidel & 0.13 & 4.57  & 100  & yes \\
         CG (no preconditioner)          & 0.13 & 0.47  & 446  & yes \\
         CG + Jacobi                     & 0.13 & 0.46  & 319  & yes \\
-        CG + symmetric Gauss--Seidel    & 0.13 & 3.23  & 104  & yes \\
+        CG + symm. Gauss--Seidel    & 0.13 & 3.23  & 104  & yes \\
         Multigrid (standalone)          & 0.21 & 0.69  & 18   & yes \\
         IETI-DP (no prec)               & 2.44 & ---   & ---  & --- \\
         \textbf{IETI-DP}                & 2.44 & \textbf{0.12} & 17 & yes \\
@@ -985,10 +984,10 @@ preferred iterative solver for the multi-RHS regime.
         Direct Cholesky                 & 0.015 & 0.018  & ---  & yes \\
         GMRES (no preconditioner)       & 0.015 & 1.20   & 452  & yes \\
         GMRES + Jacobi                  & 0.015 & 0.39   & 296  & yes \\
-        GMRES + symmetric Gauss--Seidel & 0.015 & 0.21   & 134  & yes \\
+        GMRES + symm. Gauss--Seidel & 0.015 & 0.21   & 134  & yes \\
         CG (no preconditioner)          & 0.015 & 0.10   & 1000 & no  \\
         CG + Jacobi                     & 0.015 & 0.053  & 381  & yes \\
-        CG + symmetric Gauss--Seidel    & 0.015 & 0.16   & 144  & yes \\
+        CG + symm. Gauss--Seidel    & 0.015 & 0.16   & 144  & yes \\
         Multigrid (standalone)          & 0.022 & 1.99   & 1000 & no  \\
         IETI-DP (no prec)               & 0.095 & ---    & ---  & --- \\
         \textbf{IETI-DP}                & 0.095 & \textbf{0.010} & 26 & yes \\
