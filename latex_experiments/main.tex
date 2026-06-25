@@ -628,25 +628,26 @@ Table~\ref{tab:theory} summarises the predicted serial and parallel
 
 \begin{table}[h]
   \centering
-  \caption{Predicted asymptotic scaling for the refinement sweep.
-    $\kappa$: condition number; ``iters'': count to tolerance $\varepsilon$;
-    ``serial'': total cost on one processor; ``parallel'': wall-clock cost on
-    $K$ processors (one per patch). $p$-dependence absorbed into constants.
-    Only IETI-DP is inherently patch-parallel; the remaining solvers act on the assembled global
-    system and run serially.}
+  \caption{Asymptotic scalings with explicit dependence on $n_k$ (DOFs per patch),
+    $K$ (subdomains), and $p$ (degree).
+    ``iters'': iteration count to tolerance~$\varepsilon$;
+    ``serial'': total cost on one processor; ``parallel'': wall-clock cost on $K$ processors
+    (one per patch).
+    For multigrid, $O(1)$ iters requires flat-domain elliptic regularity and fails on
+    curved manifolds or for $p>1$ (see Section~\ref{subsec:theory}).
+    Only IETI-DP is inherently patch-parallel; remaining solvers act on the global system serially.}
   \label{tab:theory}
-  \begin{tabular}{lcccc}
+  \begin{tabular}{lccc}
     \toprule
-    Method                         & $\kappa$            & iters              & serial                          & parallel ($K$ procs)     \\
+    Method                        & iters                                             & serial                                      & parallel ($K$ procs)                    \\
     \midrule
-    Direct (Cholesky)              & ---                 & ---                & $O(K^{3/2}n_k^{3/2})$          & ---                      \\
-    GMRES (no preconditioner)         & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    GMRES + Jacobi/ symm.\ GS                & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    CG (no preconditioner)         & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    CG + Jacobi/ symm.\ GS                & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
-    Multigrid (standalone)         & $O(1)$              & $O(1)$             & $O(K\,n_k)$                    & ---                      \\
-    IETI-DP                        & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{3/2}\!\log n_k)$   & $O(n_k^{3/2}\!\log n_k)$ \\
-    % IETI-DP${}^{\dagger}$          & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{1/2}\!\log n_k)$   & $O(n_k^{1/2}\!\log n_k)$ \\
+    Direct (Cholesky)             & ---                                               & $O(p^3 K^{3/2}n_k^{3/2})$                 & ---                                     \\
+    GMRES (no prec)               & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
+    GMRES + Jacobi/symm.\ GS      & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
+    CG (no prec)                  & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
+    CG + Jacobi/symm.\ GS         & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
+    Multigrid (standalone)        & $O(1)$                                            & $O(K\,n_k)$                                & ---                                     \\
+    IETI-DP                       & $O\!\bigl(\sqrt{p}(1+\log p+\log n_k)\bigr)$ & $O(K p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ & $O(p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ \\
     \bottomrule
   \end{tabular}
 \end{table}
