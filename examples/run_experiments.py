@@ -51,9 +51,15 @@ total (setup+solve), and iterations.  All raw repetition records are kept under 
 
 Figures
 -------
-All sweeps are plotted with N (number of coupled DOFs) on the x-axis in log scale
-so that asymptotic slopes are visible (log-log for times, semilog-x for iterations).
-Separate *iters_vs_* figures are saved for each sweep showing iteration counts vs N.
+Each sweep uses the natural varying parameter as the x-axis (log scale), so that the
+slopes match the theoretical predictions directly:
+
+  * refinement sweep  →  x = n_k  (DOFs per patch = N/K,  K and p fixed)
+  * degree sweep      →  x = p    (polynomial degree,      h and K fixed)
+  * subdomain sweep   →  x = K    (number of subdomains,   h and p fixed)
+
+A secondary top axis shows the corresponding total DOF count N at each tick.
+Both solve-time (log-log) and iteration-count (log-log) figures are saved for each sweep.
 
 Theoretical scalings (2-D surface problems)
 --------------------------------------------
@@ -320,13 +326,21 @@ def collect(cfg):
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
+def _get_x(r, xkey):
+    """Return the x-axis value for record *r*, supporting the derived key 'nk' (= dofs/npatches)."""
+    if xkey == "nk":
+        d, k = r.get("dofs"), r.get("npatches")
+        return round(d / k) if d and k else None
+    return r.get(xkey)
+
+
 def _series(records, method, xkey="dofs"):
     """Extract (x, solve_time, total_time, iters) for one method across records."""
     xs, solve, total, iters_list = [], [], [], []
     for r in records:
         if r.get("timed_out") or method not in r.get("methods", {}):
             continue
-        x_val = r.get(xkey)
+        x_val = _get_x(r, xkey)
         if x_val is None:
             continue
         xs.append(x_val)
@@ -335,6 +349,28 @@ def _series(records, method, xkey="dofs"):
         total.append(m["solve"] + m["setup"])
         iters_list.append(m.get("iters"))
     return xs, solve, total, iters_list
+
+
+def _add_N_axis(ax, recs, xkey):
+    """Add a secondary top x-axis showing total DOFs N at each tick position."""
+    pairs = {}
+    for r in recs:
+        if r.get("timed_out"):
+            continue
+        xv = _get_x(r, xkey)
+        N = r.get("dofs")
+        if xv is not None and N is not None:
+            pairs[xv] = N
+    if not pairs:
+        return
+    ax2 = ax.twiny()
+    ax2.set_xscale(ax.get_xscale())
+    ax2.set_xlim(ax.get_xlim())
+    tick_xs = sorted(pairs.keys())
+    tick_Ns = [pairs[x] for x in tick_xs]
+    ax2.set_xticks(tick_xs)
+    ax2.set_xticklabels([f"{n:,}" for n in tick_Ns], fontsize=7)
+    ax2.set_xlabel("total DOFs $N$", fontsize=8, labelpad=4)
 
 
 _SLOPE_COLOR = "darkorange"
@@ -363,11 +399,62 @@ def _slope_line(ax, slope, label, xs_data, ys_data,
     # skip if line exits the data range vertically
     if ly1 > ly_max + 0.6 or ly1 < ly_min - 0.6:
         return
-    ax.plot([10**lx0, 10**lx1], [10**ly0, 10**ly1], '-',
+    ax.plot([10**lx0, 10**lx1], [10**ly0, 10**ly1], '--',
             color=_SLOPE_COLOR, lw=1.1, alpha=0.55, zorder=0)
     ax.annotate(label, xy=(10**lx1, 10**ly1), xytext=(4, 0),
                 textcoords='offset points', fontsize=7, color=_SLOPE_COLOR,
-                va='center', alpha=0.9)
+                va='center',
+                bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.75))
+
+
+def _curve_ref(ax, fn, label, xs_data, ys_data, y_frac=0.20,
+               anchor_xs=None, anchor_ys=None, anchor_tight=False):
+    """Draw an arbitrary reference curve fn(x), scaled vertically to fit the data.
+
+    Unlike _slope_line, fn is evaluated exactly at each distinct x in xs_data and
+    the whole curve is shifted in log-space so its leftmost point lands at y_frac of
+    the data log y-range.  Useful for super-exponential scalings that cannot be
+    represented as straight lines on a log-log plot.
+
+    If anchor_xs/anchor_ys are given the curve is scaled relative to those points:
+    - anchor_tight=False (default): sits just above all anchor points (max ratio * 1.25)
+    - anchor_tight=True: uses the min ratio, so the curve meets the anchor at the
+      tightest point (typically the largest x); points where the curve is below the
+      data are naturally cut off by the frozen axes.
+    """
+    xs_pos = sorted(set(x for x in xs_data if x and x > 0))
+    ys_pos = [y for y in ys_data if y and y > 0]
+    if len(xs_pos) < 2 or not ys_pos:
+        return
+    ref_vals = [fn(x) for x in xs_pos]
+    if not all(v > 0 for v in ref_vals):
+        return
+    ly_min, ly_max = math.log10(min(ys_pos)), math.log10(max(ys_pos))
+    if anchor_xs is not None and anchor_ys is not None:
+        anchor_map = {x: y for x, y in zip(anchor_xs, anchor_ys)
+                      if x and y and x > 0 and y > 0}
+        ratios = [anchor_map[x] / rv
+                  for x, rv in zip(xs_pos, ref_vals)
+                  if x in anchor_map and rv > 0]
+        if ratios:
+            log_loose = math.log10(max(ratios) * 1.25)
+            log_tight = math.log10(min(ratios))
+            log_C = 0.5 * (log_loose + log_tight) if anchor_tight else log_loose
+        else:
+            log_C = ly_min + y_frac * (ly_max - ly_min) - math.log10(ref_vals[0])
+    else:
+        log_C = ly_min + y_frac * (ly_max - ly_min) - math.log10(ref_vals[0])
+    scaled_ys = [10 ** (math.log10(v) + log_C) for v in ref_vals]
+    ax.plot(xs_pos, scaled_ys, '--', color=_SLOPE_COLOR, lw=1.1, alpha=0.55, zorder=0)
+    # Annotate at the last x value; clamp y to just inside the axes top so the
+    # label is always placed even when the curve exits the top of the plot.
+    if xs_pos and scaled_ys:
+        ann_x = xs_pos[-1]
+        ann_y = min(scaled_ys[-1], 10 ** ly_max)
+        ax.annotate(label, xy=(ann_x, ann_y), xytext=(4, 0),
+                    textcoords='offset points', fontsize=7, color=_SLOPE_COLOR,
+                    va='center', annotation_clip=False,
+                    bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.75))
 
 
 def plot(cfg):
@@ -390,28 +477,73 @@ def plot(cfg):
         ("Multigrid (standalone)",       "p-.", "#27ae60", "Multigrid"),
     ]
 
+    # Per-sweep x-axis configuration.
+    # xkey: field in the record used as x (or "nk" for derived dofs/npatches).
+    # xlabel: primary axis label shown below the plot.
+    SWEEP_AXIS = {
+        "refinement":   {"xkey": "nk",      "xlabel": r"DOFs per patch $n_k = N/K$"},
+        "degree":       {"xkey": "degree",   "xlabel": r"polynomial degree $p$"},
+        "splitpatches": {"xkey": "npatches", "xlabel": r"number of subdomains $K$"},
+    }
+
     # Reference slopes: (label, exponent, y_frac).
     # y_frac positions the line's left endpoint in the data's log y-range [0=bottom, 1=top].
-    # All lines span the full x-range (minus a small margin) and use _SLOPE_COLOR.
+    # Exponents are w.r.t. the natural sweep parameter (n_k, p, or K), not total DOFs N.
     SLOPE_REFS = {
+        # refinement sweep: x = n_k, K and p fixed.
+        # CG: kappa~n_k, iters~n_k^{1/2}, time~n_k^{3/2}.  MG: O(1) iters, time~n_k.
+        # IETI-DP: iters~log(n_k) (shown as curve), time~n_k^{3/2}*log(n_k) (shown as curve).
         "refinement": {
-            "time":  [("$\\propto N$",       1.0, 0.08),
-                      ("$\\propto N^{3/2}$", 1.5, 0.32)],
-            "iters": [("$\\propto N^0$",     0.0, 0.10),
-                      ("$\\propto N^{1/2}$", 0.5, 0.52)],
+            "time":  [("$\\propto n_k$",         1.0, 0.08),
+                      ("$\\propto n_k^{3/2}$",   1.5, 0.32)],
+            "iters": [("$\\propto n_k^0$",        0.0, 0.10),
+                      ("$\\propto n_k^{1/2}$",   0.5, 0.52)],
         },
+        # degree sweep: x = p, h and K fixed.  Reference curves (not straight slopes) are
+        # used for both the IETI-DP and CG/GMRES bounds; slope lines are omitted here.
         "degree": {
-            "time":  [("$\\propto N$",       1.0, 0.04),
-                      ("$\\propto N^2$",     2.0, 0.30),
-                      ("$\\propto N^3$",     3.0, 0.60)],
-            "iters": [("$\\propto N^{1/2}$", 0.5, 0.15),
-                      ("$\\propto N^{3/2}$", 1.5, 0.62)],
+            "time":  [],
+            "iters": [],
         },
+        # splitpatches sweep: x = K, h and p fixed per subpatch.  N ~ K * n_k.
+        # Each split also halves h globally (subpatch diameter H_k = H_0/K^{1/2}),
+        # so kappa(A) ~ h^{-2} ~ K -> CG/GMRES iters ~ K^{1/2}.
+        # For IETI-DP: H/h = H_k/h = 2^r (constant!) -> kappa_IETI ~ const -> iters ~ K^0.
+        # For Multigrid: h-robust on flat domains -> iters ~ K^0.
+        # Serial cost per iter: O(N) ~ O(K) for all methods -> total CG time ~ K^{3/2},
+        # total IETI-DP/MG time ~ K^1.
         "splitpatches": {
-            "time":  [("$\\propto N$",       1.0, 0.08),
-                      ("$\\propto N^2$",     2.0, 0.38)],
-            "iters": [("$\\propto N^0$",     0.0, 0.10),
-                      ("$\\propto N^{1/2}$", 0.5, 0.52)],
+            "time":  [("$\\propto K$",       1.0, 0.05),
+                      ("$\\propto K^{3/2}$", 1.5, 0.08)],
+            "iters": [("$\\propto K^0$",     0.0, 0.10),
+                      ("$\\propto K^{1/2}$", 0.5, 0.22)],
+        },
+    }
+
+    # Reference curves: (fn, label, y_frac).  fn is evaluated at each distinct x value
+    # and the curve is shifted vertically so its leftmost point lands at y_frac of the
+    # data log y-range.  Used for scalings that are not straight lines on a log-log plot.
+    _d = 2
+    CURVE_REFS = {
+        # refinement sweep: IETI-DP bounds w.r.t. n_k.
+        # iters ~ log(n_k);  time ~ n_k^{3/2} log(n_k).
+        "refinement": {
+            "time":  [(lambda nk: nk**1.5 * math.log(nk), r"$\propto n_k^{3/2}\!\log n_k$", 0.40)],
+            "iters": [(lambda nk: math.log(nk),            r"$\propto \log n_k$",             0.25)],
+        },
+        # degree sweep (d=2):
+        # CG/GMRES: iters ~ p^{d+1} 2^{pd} = p^3 * 4^p (super-algebraic),
+        #           time  ~ same (cost per iter is O(N)~const w.r.t. p here).
+        # IETI-DP:  iters ~ sqrt(p)(1+log p);  time ~ p^{3/2} log(p).
+        "degree": {
+            # (fn, label, y_frac, anchor_method, anchor_tight)
+            # p^3·4^p: upper bound for CG/GMRES — anchored tight to CG (min ratio),
+            # so the curve meets the CG line at the largest p and enters from below.
+            # IETI theoretical curves: anchored above IETI-DP data (max ratio * 1.25).
+            "time":  [(lambda p: p**(_d+1) * 2**(p*_d),       r"$\propto p^3\!\cdot\!4^p$",       0.20, "CG + no prec",          True),
+                      (lambda p: p**1.5 * math.log(max(p, 2)), r"$\propto p^{3/2}\!\log p$",        0.55, "IETI-DP (CG on Schur)", False)],
+            "iters": [(lambda p: p**(_d+1) * 2**(p*_d),                    r"$\propto p^3\!\cdot\!4^p$",   0.20, "CG + no prec",          True),
+                      (lambda p: math.sqrt(p) * (1 + math.log(max(p, 2))), r"$\propto\sqrt{p}(1+\log p)$", 0.55, "IETI-DP (CG on Schur)", False)],
         },
     }
 
@@ -421,12 +553,15 @@ def plot(cfg):
         if sweep not in results.get("sweeps", {}):
             continue
         recs = results["sweeps"][sweep]
+        ax_cfg = SWEEP_AXIS.get(sweep, {"xkey": "dofs", "xlabel": "number of DOFs $N$"})
+        xkey   = ax_cfg["xkey"]
+        xlabel = ax_cfg["xlabel"]
 
-        # ---- solve-time figure: log-log, x = N (DOFs) ----
+        # ---- solve-time figure: log-log, x = natural sweep parameter ----
         fig, ax = plt.subplots(figsize=(7, 5))
         all_xs, all_ys = [], []
         for method_name, style, color, label in METHODS:
-            xs, solve, _, _ = _series(recs, method_name, xkey="dofs")
+            xs, solve, _, _ = _series(recs, method_name, xkey=xkey)
             if not xs:
                 continue
             ax.plot(xs, solve, style, color=color, label=label)
@@ -434,12 +569,24 @@ def plot(cfg):
             all_ys.extend(solve)
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.set_xlabel("number of DOFs $N$")
-        ax.set_ylabel("solve time [s]  (mean of 5 runs)")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("solve time [s]  (mean of 10 runs)")
         ax.grid(True, which="both", ls=":", alpha=0.5)
         ax.legend(fontsize="small")
+        ax.autoscale(enable=False)  # freeze axes so reference curves don't expand limits
         for lbl, exp, yf in SLOPE_REFS.get(sweep, {}).get("time", []):
             _slope_line(ax, exp, lbl, all_xs, all_ys, yf)
+        for entry in CURVE_REFS.get(sweep, {}).get("time", []):
+            fn, lbl, yf = entry[:3]
+            anchor_method = entry[3] if len(entry) > 3 else None
+            anchor_tight  = entry[4] if len(entry) > 4 else False
+            if anchor_method:
+                axs, sol, _, _ = _series(recs, anchor_method, xkey=xkey)
+                _curve_ref(ax, fn, lbl, all_xs, all_ys, yf,
+                           anchor_xs=axs, anchor_ys=sol, anchor_tight=anchor_tight)
+            else:
+                _curve_ref(ax, fn, lbl, all_xs, all_ys, yf)
+        _add_N_axis(ax, recs, xkey)
         fig.tight_layout()
         path = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}time_vs_{sweep}.pdf")
         fig.savefig(path)
@@ -447,12 +594,12 @@ def plot(cfg):
         plt.close(fig)
         print(f"wrote {path}")
 
-        # ---- iteration-count figure: log-log, x = N (DOFs) ----
+        # ---- iteration-count figure: log-log, x = natural sweep parameter ----
         fig2, ax2 = plt.subplots(figsize=(7, 5))
         has_data = False
         all_xs2, all_ys2 = [], []
         for method_name, style, color, label in METHODS:
-            xs, _, _, iters_list = _series(recs, method_name, xkey="dofs")
+            xs, _, _, iters_list = _series(recs, method_name, xkey=xkey)
             valid = [(x, it) for x, it in zip(xs, iters_list)
                      if it is not None and it > 0]
             if not valid:
@@ -465,12 +612,26 @@ def plot(cfg):
         if has_data:
             ax2.set_xscale("log")
             ax2.set_yscale("log")
-            ax2.set_xlabel("number of DOFs $N$")
-            ax2.set_ylabel("iteration count (mean of 5 runs)")
+            ax2.set_xlabel(xlabel)
+            ax2.set_ylabel("iteration count (mean of 10 runs)")
             ax2.grid(True, which="both", ls=":", alpha=0.5)
             ax2.legend(fontsize="small")
+            ax2.autoscale(enable=False)  # freeze axes so reference curves don't expand limits
             for lbl, exp, yf in SLOPE_REFS.get(sweep, {}).get("iters", []):
                 _slope_line(ax2, exp, lbl, all_xs2, all_ys2, yf)
+            for entry in CURVE_REFS.get(sweep, {}).get("iters", []):
+                fn, lbl, yf = entry[:3]
+                anchor_method = entry[3] if len(entry) > 3 else None
+                anchor_tight  = entry[4] if len(entry) > 4 else False
+                if anchor_method:
+                    axs, _, _, it = _series(recs, anchor_method, xkey=xkey)
+                    anch_ys = [v for v in it if v is not None and v > 0]
+                    anch_xs = [x for x, v in zip(axs, it) if v is not None and v > 0]
+                    _curve_ref(ax2, fn, lbl, all_xs2, all_ys2, yf,
+                               anchor_xs=anch_xs, anchor_ys=anch_ys, anchor_tight=anchor_tight)
+                else:
+                    _curve_ref(ax2, fn, lbl, all_xs2, all_ys2, yf)
+            _add_N_axis(ax2, recs, xkey)
             fig2.tight_layout()
             path2 = os.path.join(FIG_DIR, f"{cfg['fig_prefix']}iters_vs_{sweep}.pdf")
             fig2.savefig(path2)

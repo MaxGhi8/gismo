@@ -202,8 +202,11 @@ $\gmap = \sum_{i=1}^{n} \vect{P}_i\, \Bref{i}{\vect{p}} \in
 We assume that the geometry map is invertible with full-rank Jacobian $J_{\gmap} = D\gmap$.
 For $D = d$ the domain is planar or volumetric; for $D > d$ it is a manifold (e.g.\ a
 surface in $\R^3$), on which physical gradients use the Moore--Penrose
-pseudo-inverse $J_{\gmap}^{\dagger} = J_{\gmap}^{\top}
-(J_{\gmap} J_{\gmap}^{\top})^{-1}$ of the (non-square) Jacobian\mg{check this}.
+pseudo-inverse $J_{\gmap}^{\dagger} = (J_{\gmap}^{\top} J_{\gmap})^{-1}
+J_{\gmap}^{\top}$ of the (full-column-rank, non-square) Jacobian; this is the
+left inverse appropriate to the tall matrix $J_{\gmap}\in\R^{D\times d}$, $D>d$
+(the right inverse $J_{\gmap}^{\top}(J_{\gmap}J_{\gmap}^{\top})^{-1}$ is undefined
+here, since $J_{\gmap}J_{\gmap}^{\top}\in\R^{D\times D}$ has rank $d<D$) \mg{Check this}.
 By the isoparametric paradigm~\cite{hughes2005isogeometric}, the isogeometric
 space on $\Omega$ is
 \begin{equation}
@@ -620,11 +623,15 @@ uniform $h$-refinement level.
 We collect the asymptotic estimates against which the parameter studies of
 Sections~\ref{subsec:bench-2d}--\ref{subsec:bench-3d} are compared.
 Throughout, $N$ is the number of coupled DOFs, $K$ the number of patches,
-$n_k = N/K$ the average local patch size, $h\sim n_k^{-1/2}$ the local mesh
-size, $H$ the subdomain diameter, and $p$ the spline degree.
-Table~\ref{tab:theory} summarises the predicted serial and parallel
-($K$ processors, one per patch) costs for the refinement sweep
-(fixed $K$, $p$); the text below justifies each entry.
+$n_k = N/K$ the average local patch size, and $p$ the spline degree.
+On the fixed physical domain $\Omega$ ($d=2$ for both benchmarks) the patch
+diameter is $H\sim K^{-1/2}$ and the \emph{global} mesh size is $h\sim N^{-1/2}$,
+so the number of elements across a patch is $H/h\sim n_k^{1/2}$, independent
+of $K$. We stress the distinction between the two sweeps that vary the
+partition: \emph{refinement} fixes $K$ and grows $n_k$, whereas \emph{patch
+splitting} fixes $n_k$ and grows $K$ (with $N=K\,n_k$). Table~\ref{tab:theory} summarises the predicted serial and parallel
+($K$ processors, one per patch) costs with explicit dependence on $n_k$, $K$,
+and $p$; the text below justifies each entry.
 
 \begin{table}[h]
   \centering
@@ -633,20 +640,23 @@ Table~\ref{tab:theory} summarises the predicted serial and parallel
     ``iters'': iteration count to tolerance~$\varepsilon$;
     ``serial'': total cost on one processor; ``parallel'': wall-clock cost on $K$ processors
     (one per patch).
-    For multigrid, $O(1)$ iters requires flat-domain elliptic regularity and fails on
-    curved manifolds or for $p>1$ (see Section~\ref{subsec:theory}).
+    The multigrid $O(1)$ iteration count assumes a fixed low degree and a
+    quasi-uniform mesh of a flat domain; with point smoothers it is not robust in
+    $p$ (the $V$-cycle contraction factor approaches $1$ as $p$ grows) and breaks
+    down on the strongly distorted curved manifold (see Section~\ref{subsec:theory}).
     Only IETI-DP is inherently patch-parallel; remaining solvers act on the global system serially.}
   \label{tab:theory}
+  \small
   \begin{tabular}{lccc}
     \toprule
     Method                        & iters                                             & serial                                      & parallel ($K$ procs)                    \\
     \midrule
     Direct (Cholesky)             & ---                                               & $O(p^3 K^{3/2}n_k^{3/2})$                 & ---                                     \\
-    GMRES (no prec)               & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
-    GMRES + Jacobi/symm.\ GS      & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
-    CG (no prec)                  & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
-    CG + Jacobi/symm.\ GS         & $O(p^{d+1} 2^{pd}\, n_k^{1/2})$                 & $O(K\,p^{d+1} 2^{pd}\, n_k^{3/2})$        & ---                                     \\
-    Multigrid (standalone)        & $O(1)$                                            & $O(K\,n_k)$                                & ---                                     \\
+    GMRES (no prec)               & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
+    GMRES + Jac./S-GS      & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
+    CG (no prec)                  & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
+    CG + Jac./S-GS         & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
+    Multigrid        & $O(1)$                                            & $O(K\,n_k)$                                & ---                                     \\
     IETI-DP                       & $O\!\bigl(\sqrt{p}(1+\log p+\log n_k)\bigr)$ & $O(K p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ & $O(p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ \\
     \bottomrule
   \end{tabular}
@@ -663,7 +673,7 @@ factor $p$, raising the factorization cost to $O(p^3 N^{3/2})$ in 2D.
 \paragraph{Conjugate gradient.}
 The stiffness matrix condition number satisfies~\cite[Thm.~4.3]{gahalaut2019condition}
 \begin{equation}
-  \kappa(A) \;\sim\; h^{-2} \;\sim\; \frac{N}{K}.
+  \kappa(A) \;\sim\; h^{-2} \;\sim\; N \;=\; K\,n_k .
   \label{eq:kappa-cg}
 \end{equation}
 Denoting the error at step $k$ by $e_k = x_*-x_k$ and the
@@ -671,8 +681,10 @@ energy norm by $\|v\|_A=(Av,v)^{1/2}$, the CG convergence
 bound~\cite[Thm.~6.29]{saad2003iterative} gives
 $\|e_k\|_{A} \le 2\!\left(\tfrac{\sqrt{\kappa(A)}-1}{\sqrt{\kappa(A)}+1}\right)^{\!k}\|e_0\|_{A}$,
 the number of iterations to reach tolerance $\varepsilon$ scales as
-$O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left(n_k^{1/2}\right)$
-and the total serial solve cost as $O\!\left(K n_k^{3/2}\right)$.
+$O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left(N^{1/2}\right)
+=O\!\left((K n_k)^{1/2}\right)$
+and the total serial solve cost as
+$O\!\left(N^{3/2}\right)=O\!\left(K^{3/2} n_k^{3/2}\right)$.
 For degree elevation at fixed $h$ the condition number grows
 super-algebraically: $\kappa(A)\leq C\,p^{2d+2}4^{pd}$~\cite[Thm.~4.8]{gahalaut2019condition},
 making unpreconditioned CG rapidly intractable as $p$ increases.
@@ -681,29 +693,53 @@ Jacobi and symmetric Gauss--Seidel preconditioners reduce the spectral radius bu
 of the condition number unchanged:
 $\kappa(M_{\mathrm{J}}^{-1}A) = O(h^{-2})$ and
 $\kappa(M_{\mathrm{GS}}^{-1}A) = O(h^{-2})$.
-The iteration count therefore retains the same $O\!\left((N/K)^{1/2}\right)$
+The iteration count therefore retains the same
+$O\!\left(N^{1/2}\right)=O\!\left((K n_k)^{1/2}\right)$
 scaling with an improved (but not asymptotically better) constant.
 
 \paragraph{GMRES.}
 For the SPD systems arising from~\eqref{eq:poisson-strong}, the convergence
 bound~\cite[Cor.~6.33]{saad2003iterative} reduces to the CG bound~\cite[Thm.~6.29]{saad2003iterative},
-giving the same $O\!\left((N/K)^{1/2}\right)$ iteration count and $O\!\left(N^{3/2}/K^{1/2}\right)$
-total cost. The condition number and degree scaling are identical to the CG case.
+giving the same $O\!\left(N^{1/2}\right)=O\!\left((K n_k)^{1/2}\right)$ iteration
+count and $O\!\left(N^{3/2}\right)=O\!\left(K^{3/2} n_k^{3/2}\right)$ total cost.
+The condition number and degree scaling are identical to the CG case.
 
-\paragraph{Multigrid.}\mg{Check this ...}
-Under standard elliptic regularity a $V$-cycle with one pre- and one
-post-smoothing step yields a mesh-independent contraction factor, giving
-$\kappa(M_{\mathrm{MG}}^{-1}A)=O(1)$ and hence $O(1)$ CG
-iterations~\cite[Ch.~7]{hackbusch1994iterative},~\cite[\S2.3]{trottenberg2000multigrid}.
-The total solve cost is therefore $O(N)$, which is optimal for this class of
-problem.
-This estimate requires standard elliptic regularity on a flat (Euclidean)
-domain; for curved manifolds the V-cycle contraction factor need not be
-mesh-independent, and iteration counts may grow with $N$ (see
+\paragraph{Multigrid.}
+For an $H^{2}$-regular elliptic problem on a quasi-uniform mesh of a flat domain,
+the symmetric $V$-cycle with one pre- and one post-smoothing step satisfies the
+smoothing and approximation properties of the variational multigrid theory and
+therefore admits a contraction factor $\rho<1$ bounded independently of the mesh
+size $h$~\cite[Ch.~7]{hackbusch1994iterative},~\cite[\S2.3]{trottenberg2000multigrid}.
+Used as a preconditioner this yields $\kappa(M_{\mathrm{MG}}^{-1}A)=O(1)$, hence
+$O(1)$ iterations and an optimal $O(N)$ total solve cost.
+This $h$-robustness is, however, neither uniform in the degree $p$ nor uniform
+under strong geometric distortion.
+
+\emph{Degree.}
+For tensor-product splines of degree $p$, the spectral (symbol) analysis of the
+Galerkin matrices shows that a fixed-size subspace of high-frequency,
+maximal-continuity ($C^{p-1}$) modes is increasingly poorly damped by classical
+point smoothers (Jacobi, Gauss--Seidel) as $p$ grows; consequently the
+contraction factor of the standard $V$-cycle deteriorates towards $1$ and the
+iteration count grows with $p$~\cite{donatelli2015robust,tielen2020pmultigrid}.
+Restoring $p$-robustness requires spectrally corrected (multi-iterative)
+smoothers~\cite{donatelli2015robust} or smoothers based on stable splittings of
+the spline space, for which a contraction factor independent of both $h$ and $p$
+has been proved~\cite{hofreither2017robust}; the standard point-smoothed
+$V$-cycle used here is deliberately taken as the baseline.
+
+\emph{Geometry.}
+On a curved manifold the diffusion bilinear form pulls back to an elliptic
+problem on $\refdom$ with the spatially varying, generally anisotropic
+coefficient tensor $\sqrt{\det G}\,G^{-1}$, where $G=J_{\gmap}^{\top}J_{\gmap}$ is
+the first fundamental form of the geometry map
+(Eq.~\eqref{eq:laplace-beltrami}, Section~\ref{subsec:bench-3d}).
+Strong, geometry-induced anisotropy and variation of $G^{-1}$ violate the
+constant-coefficient heuristics behind isotropic $h$-coarsening with point
+smoothers: the smoothing property degrades, the contraction factor need not stay
+below $1$, and the iteration count may grow with $N$ or stagnate
+altogether~\cite{hackbusch1994iterative,trottenberg2000multigrid} (observed in
 Section~\ref{subsubsec:bench-3d-sweeps}).
-This $h$-robustness does \emph{not} carry over to degree elevation:
-standard point smoothers are not $p$-robust in IGA and the iteration count
-grows with $p$~\cite[\S5]{tielen2020pmultigrid}.
 
 \paragraph{IETI-DP with scaled Dirichlet preconditioner.}
 The spectral bound for the preconditioned interface
@@ -722,12 +758,17 @@ and the dominant per-iteration cost is $O(K\,p\,n_k^{3/2})$ in serial
 and $O(p\,n_k^{3/2})$ on $K$ parallel processors (Remark~\ref{rmk:schur-cost}).
 Three consequences govern the parameter sweeps.
 \begin{itemize}
-  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(n_k/K)^{1/2}$
+  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim n_k^{1/2}$
     gives $\kappa=O(\log^{2}n_k)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log n_k)$ CG iterations.
-  \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h$ stays
-    roughly constant as $K$ grows, so~\eqref{eq:kappa-ieti} predicts
-    near-constant conditioning.%; in practice iteration counts grow
-    % moderately (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps}).
+  \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h\sim n_k^{1/2}$
+    stays constant as $K$ grows, so the bound~\eqref{eq:kappa-ieti} is
+    independent of $K$ and predicts near-constant conditioning. 
+    % The mild increase of the IETI-DP iteration count observed
+    % with $K$ (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps})
+    % reflects the constant in~\eqref{eq:kappa-ieti} and the inexactness of the
+    % coarse solve, not a missing power of $K$; the dominant $K$-growth of the cost
+    % is algebraic, since each CG step performs $K$ local back-solves and the
+    % Lagrange-multiplier system grows with $K$.
   \item[(iii)] \textbf{Degree} ($h$ fixed):
     $\kappa=O\!\left(p\,(1+\log p)^{2}\right)$ \cite{schneckenleitner2020condition},
     giving $O\!\left(\sqrt{p}\,(1+\log p)\right)$ CG iterations.
@@ -746,7 +787,7 @@ the cost of the resolution of the interface problem~\eqref{eq:ieti-schur}.
 % The yeti refinement sweep provides a clean quantitative test ($K=21$ fixed):
 % unpreconditioned CG iterations increase from $118$ at $r=2$ ($N=5\,760$) to
 % $864$ at $r=5$ ($N=347\,136$), a factor of $7.3\times$, consistent with the
-% predicted $\sqrt{N_5/N_2}=\sqrt{60.3}=7.8\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N/K$).
+% predicted $\sqrt{N_5/N_2}=\sqrt{60.3}=7.8\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N$, $K$ fixed).
 % IETI-DP iterations grow from $14$ at $r=2$ to $17$ at $r=4$: the
 % bound~\eqref{eq:kappa-ieti} predicts a ratio
 % $\sqrt{(1+\tfrac{1}{2}\ln(N_4/K))^{2}/(1+\tfrac{1}{2}\ln(N_2/K))^{2}}
@@ -901,10 +942,13 @@ IETI-DP's $O(N^{3/2}/K^{1/2})$ per-iteration cost over multigrid's $O(N)$.
 \ref{fig:yeti-iters-p}):
 IETI-DP leads at every $p$, with the gap growing from $7.4\times$ at $p=1$
 to $440\times$ at $p=6$ ($0.009\,$s vs.\ $4.06\,$s).
-The widening is driven entirely by multigrid smoother deterioration: multigrid
-(standalone) iterations increase from $20$ to $488$, while IETI-DP iterations
+The widening is driven entirely by the loss of $p$-robustness of the
+point-smoothed multigrid (Section~\ref{subsec:theory}): multigrid (standalone)
+iterations increase from $20$ to $488$ (a $24\times$ growth, consistent with the
+contraction factor approaching $1$ as $p$
+grows~\cite{donatelli2015robust,tielen2020pmultigrid}), while IETI-DP iterations
 grow from $13$ to only $18$---roughly one additional iteration per unit increase
-in $p$, far milder than the $O(p^{3/2})$ that the $O(p^3)$ bound on $C$
+in $p$, far milder than the $O(p^{3/2})$ that the $O(p^{3})$ bound on $C$
 in~\eqref{eq:kappa-ieti} would imply~\cite{kleiss2012ieti}.
 Note that at $p=6$, CG (no preconditioner) also fails to converge within $1000$
 iterations on this flat domain.
@@ -915,11 +959,15 @@ IETI-DP leads for $K\leq 336$ ($10.8\times$ at $K=21$, $1.7\times$ at $K=336$)
 and falls behind at $K=1344$ (multigrid $1.7\times$ faster) and $K=5376$
 (multigrid $3.9\times$ faster, $0.98\,$s vs.\ $3.85\,$s).
 Multigrid (standalone) iteration counts remain essentially constant at $16$--$27$
-across all split levels, confirming $K$-independence of the condition number on
-this flat geometry.
+across all split levels, confirming $K$-independence of the multigrid condition
+number on this flat geometry.
+The unpreconditioned (and Jacobi/Gauss--Seidel) Krylov solvers instead show
+iteration counts that grow with $K$ (Figure~\ref{fig:yeti-iters-K}), consistent
+with the corrected estimate $\kappa(A)\sim K$ and the resulting $O(\sqrt{K})$
+growth of Section~\ref{subsec:theory}.
 IETI-DP iterations grow from $14$ to $29$; as explained in
 Section~\ref{subsec:theory}~(ii), the spectral bound~\eqref{eq:kappa-ieti}
-predicts roughly constant conditioning (since $H/h\approx\sqrt{N/K}\approx 5$
+predicts roughly constant conditioning (since $H/h\approx\sqrt{n_k}\approx 5$
 throughout), so the cost increase is primarily algebraic---each CG step
 requires $K$ local back-solves and the Lagrange multiplier system scales
 with $K$.
@@ -929,11 +977,32 @@ with $K$.
 \label{subsec:bench-3d}
 
 The teapot is an open NURBS surface in $\R^3$ with $\npatch = 32$ patches
-(Figure~\ref{fig:refcase}). The physical domain is a curved manifold ($d = 2 < D = 3$),
-so the assembled operator is the Laplace--Beltrami operator and the Jacobian is
-non-square (Moore--Penrose pseudo-inverse used for physical gradients). The field
-$u = \sin(x)\cos(y)$ is no longer exact, so the $L^2$ column measures
-inter-method agreement, not solution accuracy.
+(Figure~\ref{fig:refcase}). The physical domain is a two-dimensional Riemannian
+manifold $\mathcal{M}=\gmap(\refdom)$ embedded in $\R^3$ ($d = 2 < D = 3$), so the
+geometry map has a non-square Jacobian $J_{\gmap}=D\gmap\in\R^{3\times 2}$ and
+induces the \emph{first fundamental form} (metric tensor)
+$G:=J_{\gmap}^{\top}J_{\gmap}\in\R^{2\times 2}$, symmetric positive definite
+wherever $J_{\gmap}$ has full column rank. With $\alpha\equiv 1$, the model
+problem~\eqref{eq:poisson-strong} becomes the Laplace--Beltrami equation
+$-\Delta_{\mathcal M}u=f$, where
+$\Delta_{\mathcal M}u=\tfrac{1}{\sqrt{\det G}}\,
+\widehat\nabla\!\cdot\!\bigl(\sqrt{\det G}\,G^{-1}\widehat\nabla\widehat u\bigr)$
+and $\widehat u=u\circ\gmap$. Its weak form uses the tangential (surface)
+gradient $\nabla_{\mathcal M}u=(J_{\gmap}^{\dagger})^{\top}\widehat\nabla\widehat u
+\in T_{x}\mathcal M$, with $J_{\gmap}^{\dagger}=(J_{\gmap}^{\top}J_{\gmap})^{-1}
+J_{\gmap}^{\top}=G^{-1}J_{\gmap}^{\top}$ the Moore--Penrose pseudo-inverse;
+equivalently, pulling back to the parameter domain,
+\begin{equation}
+  a(u,v)=\int_{\mathcal M}\nabla_{\mathcal M}u\cdot\nabla_{\mathcal M}v\,\mathrm{d}S
+        =\int_{\refdom}\bigl(\widehat\nabla\widehat u\bigr)^{\top}\,G^{-1}\,
+         \bigl(\widehat\nabla\widehat v\bigr)\,\sqrt{\det G}\;\mathrm{d}\widehat x .
+  \label{eq:laplace-beltrami}
+\end{equation}
+We follow the isogeometric surface-PDE framework
+of~\cite{dede2015isogeometric}; see also the surface finite-element analysis
+of~\cite{dziuk2013finite}. The field $u = \sin(x)\cos(y)$ is no longer an exact
+solution, so the $L^2$ column measures inter-method agreement, not solution
+accuracy.
 
 \begin{figure}[t]
     \centering
@@ -967,11 +1036,12 @@ $r = 4$ ($N = 9\,078$ dofs, $\Lambda = 1024$); both share $\nprim = 22$ primal
 dofs (corner constraints).
 At $r = 3$ all methods converge, with IETI-DP achieving the fastest solve
 ($0.0011\,$s) and multigrid a competitive $0.015\,$s in 35 iterations.
-Refining to $r = 4$ exposes the sensitivity of the multigrid smoother to the
-Laplace--Beltrami operator on the curved teapot surface: multigrid stagnates
-(1000 iterations, no convergence), whereas IETI-DP remains robust ($0.0047\,$s,
-26 iterations), $11\times$ faster than the next-best converging global-system
-solver (CG+Jacobi at $0.052\,$s).
+Refining to $r = 4$ exposes the sensitivity of the point-smoothed $V$-cycle to
+the geometry-induced anisotropy of the pulled-back Laplace--Beltrami
+form~\eqref{eq:laplace-beltrami} on the curved teapot surface: multigrid
+stagnates (1000 iterations, no convergence), whereas IETI-DP remains robust
+($0.0047\,$s, 26 iterations), $11\times$ faster than the next-best converging
+global-system solver (CG+Jacobi at $0.052\,$s).
 The IETI-DP setup cost of $0.095\,$s at $r = 4$ is amortized over approximately
 $2$ right-hand sides relative to CG+Jacobi (and $5$ relative to Direct
 Cholesky), making it the preferred solver in the multi-RHS regime.
@@ -1067,9 +1137,11 @@ IETI-DP leads at every refinement level, reaching $8.75\times$ at $r=2$
 A key distinction from the flat yeti domain: multigrid (standalone) converges
 only at $r=2$--$3$ (respectively $8.75\times$ and $4.8\times$ slower than
 IETI-DP) and fails to converge within 1000 iterations from $r=4$ onwards.
-The Laplace--Beltrami operator on the curved teapot surface degrades the
-V-cycle contraction factor, leading to multigrid divergence rather than merely
-slow convergence---in stark contrast to the flat-domain $O(1)$ prediction of
+The variable-coefficient, anisotropic structure of the pulled-back
+Laplace--Beltrami form~\eqref{eq:laplace-beltrami} degrades the smoothing
+property of the point smoother, driving the $V$-cycle contraction factor towards
+(and past) $1$, so multigrid diverges rather than merely converging slowly---in
+stark contrast to the flat-domain $O(1)$ prediction of
 Section~\ref{subsec:theory}.
 IETI-DP instead converges robustly at every level, with iterations growing from
 $19$ at $r=2$ to $38$ at $r=6$, consistent with~\eqref{eq:kappa-ieti} (see the
@@ -1091,12 +1163,16 @@ Multigrid (standalone) converges for $K\leq 512$, with IETI-DP $8.75\times$
 faster at $K=32$ and $2.8\times$ at $K=512$; it fails to converge within
 1000 iterations for $K\geq 2048$ on this curved surface.
 IETI-DP iteration counts grow from $19$ at $K=32$ to $125$ at $K=8192$.
-At $K\geq 2048$, multigrid, unpreconditioned CG and GMRES also diverge;
+At $K\geq 2048$, multigrid, unpreconditioned CG and GMRES also diverge,
+consistent with their $\kappa(A)\sim K$ growth (Section~\ref{subsec:theory});
 among iterative solvers, IETI-DP remains fastest (followed by CG and GMRES
 with symmetric Gauss-Seidel), while the increasing Lagrange multiplier count
 drives up the per-iteration cost.
-The $O(\log N)$ spectral bound~\eqref{eq:kappa-ieti} limits the iteration
-growth despite the large number of subdomains.
+The conditioning bound~\eqref{eq:kappa-ieti} is independent of $K$
+(Section~\ref{subsec:theory}~(ii)), so the IETI-DP growth from $19$ to $125$
+remains far milder than the $O(\sqrt{K})$ trend of the global Krylov solvers and
+reflects the constant in the bound and the inexact coarse solve rather than a
+genuine power of $K$.
 
 
 
@@ -1236,6 +1312,18 @@ growth despite the large number of subdomains.
 
     \bibitem{tielen2020pmultigrid}
     Tielen, R.P.W.M., Möller, M., Göddeke, D. and Vuik, C., 2020. p-multigrid methods and their comparison to h-multigrid methods within Isogeometric Analysis. Computer Methods in Applied Mechanics and Engineering, 372, p.113347.
+
+    \bibitem{donatelli2015robust}
+    Donatelli, M., Garoni, C., Manni, C., Serra-Capizzano, S. and Speleers, H., 2015. Robust and optimal multi-iterative techniques for IgA Galerkin linear systems. Computer Methods in Applied Mechanics and Engineering, 284, pp.230--264.
+
+    \bibitem{hofreither2017robust}
+    Hofreither, C. and Takacs, S., 2017. Robust multigrid for isogeometric analysis based on stable splittings of spline spaces. SIAM Journal on Numerical Analysis, 55(4), pp.2004--2024.
+
+    \bibitem{dede2015isogeometric}
+    Dedè, L. and Quarteroni, A., 2015. Isogeometric analysis for second order partial differential equations on surfaces. Computer Methods in Applied Mechanics and Engineering, 284, pp.807--834.
+
+    \bibitem{dziuk2013finite}
+    Dziuk, G. and Elliott, C.M., 2013. Finite element methods for surface PDEs. Acta Numerica, 22, pp.289--396.
 
     \bibitem{moller2026iganet}
     Möller, M., Obermair, G., Singer, I., Gollmann, C., Reali, A. and Elgeti, S., 2026. IGANets: Isogeometric analysis networks and their applications to linear structural analysis problems. Engineering with Computers, 42(3), p.102.
