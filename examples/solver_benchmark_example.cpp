@@ -372,8 +372,8 @@ int main(int argc, char *argv[])
     index_t mgPostSmooth = 1;
     index_t mgCycles = 1;
     std::string squareDiscr("global");
-    std::string chosenSolvers("Multigrid");
-    std::string chosenPrecs("no prec");
+    std::string chosenSolvers("CG,GMRES,Multigrid");
+    std::string chosenPrecs("no prec,Jacobi,symm. Gauss-Seidel");
 
     gsCmdLine cmd("Fair benchmark of several linear solvers on one isogeometric Poisson discretization.");
     cmd.addString("g", "Geometry",              "Geometry file", geometry);

@@ -102,7 +102,7 @@ FIG_DIR = os.path.join(ROOT, "latex_experiments", "figures")
 
 # Restrict the global-system solvers to the multigrid baseline (CG + multigrid).
 # IETI-DP is always run by the benchmark regardless of this list.
-COMMON_ARGS = ["--Solvers", "CG,Multigrid", "--Preconditioners", "no prec,Jacobi,symm. Gauss-Seidel,multigrid"]
+COMMON_ARGS = ["--Solvers", "CG,GMRES,Multigrid", "--Preconditioners", "no prec,Jacobi,symm. Gauss-Seidel"]
 
 # ---------------------------------------------------------------------------
 # Domain configurations
@@ -258,13 +258,14 @@ def run_one(geometry, splitpatches, degree, refinements, timeout=600, extra=None
                     degree=degree, refinements=refinements, timed_out=False)
     mean_rec["runs"] = all_recs  # all 5 raw records for later variance analysis
 
-    ieti  = mean_rec["methods"].get("IETI-DP (CG on Schur)", {})
-    mg    = mean_rec["methods"].get("CG + multigrid", {})
-    cg_no = mean_rec["methods"].get("CG + no prec", {})
+    ieti    = mean_rec["methods"].get("IETI-DP (CG on Schur)", {})
+    mg      = mean_rec["methods"].get("Multigrid (standalone)", {})
+    cg_no   = mean_rec["methods"].get("CG + no prec", {})
+    gmres_no = mean_rec["methods"].get("GMRES + no prec", {})
     _fmt = lambda v: f"{v:.3f}" if v is not None else "N/A"
     print(f"    dofs={mean_rec['dofs']} patches={mean_rec['npatches']} "
           f"IETI={_fmt(ieti.get('solve'))} MG={_fmt(mg.get('solve'))} "
-          f"CG_no={_fmt(cg_no.get('solve'))}", flush=True)
+          f"CG_no={_fmt(cg_no.get('solve'))} GMRES_no={_fmt(gmres_no.get('solve'))}", flush=True)
     return mean_rec
 
 
@@ -344,12 +345,14 @@ def plot(cfg):
         results = json.load(f)
 
     METHODS = [
-        ("IETI-DP (CG on Schur)",   "o-",  "#c0392b", "IETI-DP"),
-        ("CG + multigrid",          "s--", "#2c3e50", "CG + Multigrid"),
-        ("CG + no prec",            "v:",  "#7f8c8d", "CG (no prec)"),
-        ("CG + Jacobi",             "d:",  "#2980b9", "CG + Jacobi"),
-        ("CG + symm. Gauss-Seidel", "^:",  "#8e44ad", "CG + GS sym"),
-        ("Multigrid (standalone)",  "p-.", "#27ae60", "Multigrid alone"),
+        ("IETI-DP (CG on Schur)",       "o-",  "#c0392b", "IETI-DP"),
+        ("GMRES + no prec",              "v--", "#aab7b8", "GMRES (no prec)"),
+        ("GMRES + Jacobi",               "d--", "#1a5276", "GMRES + Jacobi"),
+        ("GMRES + symm. Gauss-Seidel",  "^--", "#6c3483", "GMRES + GS sym"),
+        ("CG + no prec",                 "v:",  "#7f8c8d", "CG (no prec)"),
+        ("CG + Jacobi",                  "d:",  "#2980b9", "CG + Jacobi"),
+        ("CG + symm. Gauss-Seidel",     "^:",  "#8e44ad", "CG + GS sym"),
+        ("Multigrid (standalone)",       "p-.", "#27ae60", "Multigrid"),
     ]
 
     # Reference slopes: (label, exponent, y_frac).

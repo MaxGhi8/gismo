@@ -1,6 +1,8 @@
 \documentclass{article}
 \usepackage[english]{babel}
 \usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
 
 % Useful packages
 \usepackage{amsmath}
@@ -470,8 +472,8 @@ We define the \emph{neural Schur operator} with shared weights $\theta$ as
     \vect{v} \mapsto \Snn(\vect{v}; \vect{\zeta}_k) \approx \Sloc{k} \vect{v},
     \label{eq:neural-schur}
 \end{equation}
-and the \emph{neural scaled Dirichlet preconditioner} by substituting~\eqref{eq:neural-schur}
-into~\eqref{eq:scaled-dirichlet}:
+and the \emph{neural scaled Dirichlet preconditioner} by substituting \eqref{eq:neural-schur}
+into \eqref{eq:scaled-dirichlet}:
 \begin{equation}
     \Pneural = \sum_{k=1}^{\npatch}
     \Jskel{k}\, \Dmult{k}^{-1}\, \Snn(\,\cdot\,;\vect{\zeta}_k)\,
@@ -596,11 +598,11 @@ Timings are the mean over five repetitions.
 
 \subsection{Setup} \label{subsec:bench-setup}
 
-We compare GMRES and CG with Jacobi, symmetric Gauss--Seidel, ILU, and geometric
-multigrid preconditioners; geometric multigrid as a standalone solver; and the
-IETI-DP solver of Section~\ref{subsec:ieti}.
-%The geometric multigrid uses Gauss--Seidel smoothing (one pre-/post-smooth step,
-%V-cycle; levels equal to the number of $h$-refinement steps). 
+We compare Direct Cholesky; GMRES and CG with no preconditioner, Jacobi, and symmetric Gauss--Seidel;
+geometric multigrid as a standalone solver; and the IETI-DP solver of
+Section~\ref{subsec:ieti} (with and without the scaled Dirichlet preconditioner).
+The geometric multigrid uses Gauss--Seidel smoothing (one pre-/post-smooth step,
+V-cycle; levels equal to the number of $h$-refinement steps)
 Geometry, basis, boundary
 conditions, and right-hand side are identical across all methods.
 Two test geometries are considered: a planar B-spline multipatch domain in $\R^2$
@@ -620,26 +622,32 @@ Sections~\ref{subsec:bench-2d}--\ref{subsec:bench-3d} are compared.
 Throughout, $N$ is the number of coupled DOFs, $K$ the number of patches,
 $n_k = N/K$ the average local patch size, $h\sim n_k^{-1/2}$ the local mesh
 size, $H$ the subdomain diameter, and $p$ the spline degree.
-Table~\ref{tab:theory} summarises the predictions for the refinement sweep
+Table~\ref{tab:theory} summarises the predicted serial and parallel
+($K$ processors, one per patch) costs for the refinement sweep
 (fixed $K$, $p$); the text below justifies each entry.
 
 \begin{table}[h]
   \centering
-  \caption{Predicted asymptotic scaling with the number of DOFs $N$ for the
-    refinement sweep ($K$ and $p$ fixed).
-    $\kappa$ is the relevant condition number, ``iters'' the iteration count to
-    tolerance $\varepsilon$, and ``time'' the solve-phase cost.}
+  \caption{Predicted asymptotic scaling for the refinement sweep ($K$, $p$ fixed),
+    with $N = K n_k$.
+    $\kappa$: condition number; ``iters'': count to tolerance $\varepsilon$;
+    ``serial'': total cost on one processor; ``parallel'': wall-clock cost on
+    $K$ processors (one per patch). $p$-dependence absorbed into constants.
+    Only IETI-DP is inherently patch-parallel; the remaining solvers act on the assembled global
+    system and are run serially.}
   \label{tab:theory}
-  \begin{tabular}{lccc}
+  \begin{tabular}{lcccc}
     \toprule
-    Method                    & $\kappa$          & iters           & solve time      \\
+    Method                         & $\kappa$            & iters              & serial                          & parallel ($K$ procs)     \\
     \midrule
-    Direct (Cholesky)         & ---               & ---             & $O(N^{3/2})$    \\
-    CG (no preconditioner)    & $O(N)$            & $O(N^{1/2})$    & $O(N^{3/2})$    \\
-    CG + Jacobi / symm.\ GS   & $O(N)$            & $O(N^{1/2})$    & $O(N^{3/2})$    \\
-    CG + Multigrid            & $O(1)$            & $O(1)$          & $O(N)$          \\
-    Multigrid (standalone)    & $O(1)$            & $O(1)$          & $O(N)$          \\
-    IETI-DP                   & $O(\log^2 N)$     & $O(\log N)$     & $O(N\log N)$    \\
+    Direct (Cholesky)              & ---                 & ---                & $O(K^{3/2}n_k^{3/2})$          & ---                      \\
+    CG (no preconditioner)         & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
+    CG + Jacobi                    & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---    \\
+    CG + symm.\ GS                 & $O(n_k)$            & $O(n_k^{1/2})$     & $O(K\,n_k^{3/2})$              & ---                      \\
+    CG + Multigrid                 & $O(1)$              & $O(1)$             & $O(K\,n_k)$                    & ---                      \\
+    Multigrid (standalone)         & $O(1)$              & $O(1)$             & $O(K\,n_k)$                    & ---                      \\
+    IETI-DP                        & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{3/2}\!\log n_k)$   & $O(n_k^{3/2}\!\log n_k)$ \\
+    % IETI-DP${}^{\dagger}$          & $O(\log^2 n_k)$     & $O(\log n_k)$      & $O(K\,n_k^{1/2}\!\log n_k)$   & $O(n_k^{1/2}\!\log n_k)$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -647,7 +655,7 @@ Table~\ref{tab:theory} summarises the predictions for the refinement sweep
 \paragraph{Direct solver.}
 For a 2-D elliptic problem on a quasi-uniform mesh, nested
 dissection~\cite[Thm.~4.1]{george1973nested} produces a Cholesky factorization in
-$O(N^{3/2})$ operations.
+$O(N^{3/2}) = O(K^{3/2}n_k^{3/2})$ operations.
 For IGA with tensor-product B-splines of degree $p$, each basis function
 couples $O(p^d)$ neighbours; the nested-dissection separators grow by a
 factor $p$, raising the factorization cost to $O(p^3 N^{3/2})$ in 2D.
@@ -663,8 +671,8 @@ energy norm by $\|v\|_A=(Av,v)^{1/2}$, the CG convergence
 bound~\cite[Thm.~6.29]{saad2003iterative} gives
 $\|e_k\|_{A} \le 2\!\left(\tfrac{\sqrt{\kappa(A)}-1}{\sqrt{\kappa(A)}+1}\right)^{\!k}\|e_0\|_{A}$,
 the number of iterations to reach tolerance $\varepsilon$ scales as
-$O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left((N/K)^{1/2}\right)$
-and the total solve cost as $O\!\left(N^{3/2}/K^{1/2}\right)$.
+$O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left(n_k^{1/2}\right)$
+and the total serial solve cost as $O\!\left(K n_k^{3/2}\right)$.
 For degree elevation at fixed $h$ the condition number grows
 super-algebraically: $\kappa(A)\leq C\,p^{2d+2}4^{pd}$~\cite[Thm.~4.8]{gahalaut2019condition},
 making unpreconditioned CG rapidly intractable as $p$ increases.
@@ -672,7 +680,7 @@ making unpreconditioned CG rapidly intractable as $p$ increases.
 Jacobi and symmetric Gauss--Seidel preconditioners reduce the spectral radius but leave the asymptotic order
 of the condition number unchanged:
 $\kappa(M_{\mathrm{J}}^{-1}A) = O(h^{-2})$ and
-$\kappa(M_{\mathrm{GS}}^{-1}A) = O(h^{-2})$ \mg{Check this ...}.
+$\kappa(M_{\mathrm{GS}}^{-1}A) = O(h^{-2})$.
 The iteration count therefore retains the same $O\!\left((N/K)^{1/2}\right)$
 scaling with an improved (but not asymptotically better) constant.
 
@@ -700,39 +708,49 @@ grows with $p$~\cite[\S5]{tielen2020pmultigrid}.
 \paragraph{IETI-DP with scaled Dirichlet preconditioner.}
 The spectral bound for the preconditioned interface
 system~\eqref{eq:ieti-schur}--\eqref{eq:scaled-dirichlet}
-\cite[\S4.4]{kleiss2012ieti}, \cite[Ch.~6]{pechstein2013finite} is:
+\cite{schneckenleitner2020condition} is:
 \begin{equation}
   \kappa\!\left(M_{sD}^{-1}F\right)
-  \;\leq\; C\,\bigl(1+\log(H/h)\bigr)^{2},
+  \;\leq\; C\,p\,\bigl(1+\log p+\log(H/h)\bigr)^{2},
   \label{eq:kappa-ieti}
 \end{equation}
-where $C>0$ is independent of $h$, $H$, $K$, and $N$.
+where $C>0$ is independent of $h$, $H$, $K$, $N$, and $p$.
+By the CG convergence bound~\cite[Thm.~6.29]{saad2003iterative}, the number of iterations to
+reach tolerance $\varepsilon$ scales as
+$O\!\left(\sqrt{\kappa(M_{sD}^{-1}F)}\,\log(1/\varepsilon)\right)$,
+and the dominant per-iteration cost is $O(K\,p\,n_k^{3/2})$ in serial
+and $O(p\,n_k^{3/2})$ on $K$ parallel processors (Remark~\ref{rmk:schur-cost}).
 Three consequences govern the parameter sweeps.
 \begin{itemize}
   \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim(N/K)^{1/2}$
-    gives $\kappa=O(\log^{2}N)$ and $O(\log N)$ CG iterations.
-    With direct local solvers the serial total cost is
-    $O(N^{3/2}K^{-1/2}\log N)$.
+    gives $\kappa=O(\log^{2}N)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log N)$ CG iterations.
   \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h$ stays
     roughly constant as $K$ grows, so~\eqref{eq:kappa-ieti} predicts
-    near-constant conditioning; in practice iteration counts grow
-    moderately (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps}).
-  \item[(iii)] \textbf{Degree} ($h$ fixed): $C=O(p^{3})$~\cite[\S4.4]{kleiss2012ieti},
-    algebraic growth far milder than the super-algebraic
-    $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$ for unpreconditioned
-    CG~\cite[Thm.~4.8]{gahalaut2019condition}.
+    near-constant conditioning.%; in practice iteration counts grow
+    % moderately (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps}).
+  \item[(iii)] \textbf{Degree} ($h$ fixed):
+    $\kappa=O\!\left(p\,(1+\log p)^{2}\right)$ \cite{schneckenleitner2020condition},
+    giving $O\!\left(\sqrt{p}\,(1+\log p)\right)$ CG iterations.
+    % , this is algebraic growth
+    % that is far milder than the super-algebraic $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$
+    % for unpreconditioned CG.
 \end{itemize}
 
-% \smallskip
+After solving the system~\eqref{eq:ieti-schur}, the reconstruction step (Algorithm~\ref{alg:ieti-dp}, lines 10--15)
+recovers each $\uaug{k}$ by one back-solve with the precomputed $\Aaug{k}$
+factorization, costing $O(K\,p\,n_k^{3/2})$ in serial or $O(p\,n_k^{3/2})$
+in parallel. This is equivalent to a single CG iteration, so the total solve cost is driven by 
+the cost of the resolution of the interface problem~\eqref{eq:ieti-schur}.
+
 % \noindent\emph{Condition number verification.}
 % The yeti refinement sweep provides a clean quantitative test ($K=21$ fixed):
-% unpreconditioned CG iterations increase from $62$ at $r=1$ ($N=1\,536$) to
-% $864$ at $r=5$ ($N=347\,136$), a factor of $14.2\times$, consistent with the
-% predicted $\sqrt{226}=15.0\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N/K$).
+% unpreconditioned CG iterations increase from $118$ at $r=2$ ($N=5\,760$) to
+% $864$ at $r=5$ ($N=347\,136$), a factor of $7.3\times$, consistent with the
+% predicted $\sqrt{N_5/N_2}=\sqrt{60.3}=7.8\times$ from~\eqref{eq:kappa-cg} ($\kappa\sim N/K$).
 % IETI-DP iterations grow from $14$ at $r=2$ to $17$ at $r=4$: the
 % bound~\eqref{eq:kappa-ieti} predicts a ratio
 % $\sqrt{(1+\tfrac{1}{2}\ln(N_4/K))^{2}/(1+\tfrac{1}{2}\ln(N_2/K))^{2}}
-% = (5.17/3.81) = 1.36$ at most; the observed ratio is $17/14=1.21\times$,
+% = (5.17/3.81) = 1.36\times$ at most; the observed ratio is $17/14=1.21\times$,
 % consistent with the bound.
 % For the teapot ($K=32$ fixed), IETI-DP iterations grow from $19$ at $r=2$
 % ($N=750$) to $38$ at $r=6$ ($N=134\,550$): the bound predicts
@@ -777,10 +795,10 @@ The reference case uses $p = 2$, $r = 4$: $N = 87\,552$ dofs, $\Lambda = 1536$
 Lagrange multipliers. Every patch corner is a Dirichlet node, so $\nprim = 0$
 and IETI-DP reduces to plain IETI. Table~\ref{tab:yeti-reference} separates
 setup (one-time local Cholesky factorization) from solve (Krylov iterations).
-On a single processor, IETI has the cheapest solve at $0.17\,$s ($2.8\times$
-faster than CG+multigrid), but an expensive setup ($2.58\,$s, the $K=21$
-patch-parallel Cholesky factorizations run serially here) that requires
-approximately $7$ right-hand sides to amortize over CG+multigrid.
+IETI-DP has the cheapest solve at $0.12\,$s ($5.8\times$
+faster than multigrid standalone at $0.69\,$s), but an expensive setup ($2.44\,$s,
+the $K=21$ local Cholesky factorizations) that requires approximately $4$
+right-hand sides to amortize over multigrid standalone.
 The parameter-study figures report solve-only time, corresponding to the
 multi-RHS regime for which IETI-DP is designed; in a parallel setting the
 setup cost would also reduce proportionally.
@@ -790,7 +808,7 @@ setup cost would also reduce proportionally.
     \caption{Reference case (yeti domain, $\npatch = 21$, $p = 2$, $r = 4$;
     $N = 87\,552$). Setup is measured once; solve times are means over 5 runs.
     Tolerance $10^{-8}$.
-    IETI iteration counts are CG steps on the interface
+    IETI-DP iteration counts are CG steps on the interface
     problem~\eqref{eq:ieti-schur} and are not directly comparable with the
     global-system counts.}
     \label{tab:yeti-reference}
@@ -798,19 +816,16 @@ setup cost would also reduce proportionally.
         \toprule
         Method & setup [s] & solve [s] & iters & converged \\
         \midrule
-        Direct Cholesky                 & 0.61 & 0.51 & -    & yes \\
-        GMRES (no preconditioner)       & 0.61 & 6.05 & 397  & yes \\
-        GMRES + Jacobi                  & 0.61 & 3.40 & 280  & yes \\
-        GMRES + symmetric Gauss--Seidel & 0.61 & 5.39 & 100  & yes \\
-        GMRES + ILU                     & 0.98 & 0.69 & 99   & yes \\
-        GMRES + multigrid               & 0.71 & 0.52 & 13   & yes \\
-        CG (no preconditioner)          & 0.61 & 1.81 & 446  & yes \\
-        CG + Jacobi                     & 0.61 & 0.56 & 319  & yes \\
-        CG + symmetric Gauss--Seidel    & 0.61 & 2.77 & 104  & yes \\
-        CG + ILU                        & 0.98 & 3.31 & 1000 & no  \\
-        CG + multigrid                  & 0.71 & 0.47 & 13   & yes \\
-        Multigrid (standalone)          & 0.71 & 0.65 & 18   & yes \\
-        \textbf{IETI}                   & 2.58 & \textbf{0.17} & 17 & yes \\
+        Direct Cholesky                 & 0.13 & 0.47  & ---  & yes \\
+        GMRES (no preconditioner)       & 0.13 & 4.85  & 397  & yes \\
+        GMRES + Jacobi                  & 0.13 & 2.58  & 280  & yes \\
+        GMRES + symmetric Gauss--Seidel & 0.13 & 4.57  & 100  & yes \\
+        CG (no preconditioner)          & 0.13 & 0.47  & 446  & yes \\
+        CG + Jacobi                     & 0.13 & 0.46  & 319  & yes \\
+        CG + symmetric Gauss--Seidel    & 0.13 & 3.23  & 104  & yes \\
+        Multigrid (standalone)          & 0.21 & 0.69  & 18   & yes \\
+        IETI-DP (no prec)               & 2.44 & ---   & ---  & --- \\
+        \textbf{IETI-DP}                & 2.44 & \textbf{0.12} & 17 & yes \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -867,13 +882,13 @@ All measurements are single-processor; the parallel advantage of IETI-DP
 
 \emph{(i)~Mesh resolution} (Figures~\ref{fig:yeti-time-r},
 \ref{fig:yeti-iters-r}):
-IETI-DP leads at every refinement level, with a $5.4$--$6.3\times$ advantage
-for $r=2$--$4$ (e.g.\ $6.3\times$ at $r=4$: $0.14\,$s vs.\ $0.87\,$s)
-before narrowing to $3.3\times$ at $r=5$ ($N=347\,136$).
-Multigrid iteration counts remain nearly constant at $11$--$14$
-(Figure~\ref{fig:yeti-iters-r}), confirming $h$-robustness on
+IETI-DP leads at every refinement level, with roughly $6\times$ advantage
+over multigrid at $r=4$ ($0.12\,$s vs.\ $0.69\,$s),
+narrowing to $4.5\times$ at $r=5$ ($N=347\,136$).
+Multigrid (standalone) iteration counts remain nearly flat at $16$--$20$
+(Figure~\ref{fig:yeti-iters-r}), confirming approximate $h$-robustness on
 the flat domain.
-IETI-DP iterations grow mildly from $14$ at $r=2$ to $17$ at $r=4$, well
+IETI-DP iterations grow mildly from $14$ at $r=2$ to $18$ at $r=5$, well
 within the $O(\log N)$ bound~\eqref{eq:kappa-ieti} (see condition number
 verification in Section~\ref{subsec:theory}).
 The narrowing advantage at $r=5$ reflects the asymptotic dominance of
@@ -881,22 +896,24 @@ IETI-DP's $O(N^{3/2}/K^{1/2})$ per-iteration cost over multigrid's $O(N)$.
 
 \emph{(ii)~Polynomial degree} (Figures~\ref{fig:yeti-time-p},
 \ref{fig:yeti-iters-p}):
-IETI-DP leads at every $p$, with the gap accelerating from $6\times$ at $p=1$
-to $97\times$ at $p=6$ ($0.009\,$s vs.\ $0.91\,$s).
-The widening is driven entirely by multigrid smoother deterioration: CG+multigrid
-iterations increase from $13$ to $111$, while IETI-DP iterations grow from $13$
-to only $18$---roughly one additional iteration per unit increase in $p$, far
-milder than the $O(p^{3/2})$ that the $O(p^3)$ bound on $C$
+IETI-DP leads at every $p$, with the gap growing from $7.4\times$ at $p=1$
+to $440\times$ at $p=6$ ($0.009\,$s vs.\ $4.06\,$s).
+The widening is driven entirely by multigrid smoother deterioration: multigrid
+(standalone) iterations increase from $20$ to $488$, while IETI-DP iterations
+grow from $13$ to only $18$---roughly one additional iteration per unit increase
+in $p$, far milder than the $O(p^{3/2})$ that the $O(p^3)$ bound on $C$
 in~\eqref{eq:kappa-ieti} would imply~\cite{kleiss2012ieti}.
+Note that at $p=6$, CG (no preconditioner) also fails to converge within $1000$
+iterations on this flat domain.
 
 \emph{(iii)~Number of subdomains} (Figures~\ref{fig:yeti-time-K},
 \ref{fig:yeti-iters-K}):
-IETI-DP leads for $K\leq 336$ ($5.3\times$ at $K=21$, $1.6\times$ at $K=336$)
-and falls behind at $K=1344$ (multigrid $2.3\times$ faster) and $K=5376$
-(multigrid $6\times$ faster, $0.65\,$s vs.\ $3.85\,$s).
-Multigrid iteration counts remain essentially constant at $11$--$17$ across
-all split levels, confirming $K$-independence of the preconditioned condition
-number on this flat geometry.
+IETI-DP leads for $K\leq 336$ ($10.8\times$ at $K=21$, $1.7\times$ at $K=336$)
+and falls behind at $K=1344$ (multigrid $1.7\times$ faster) and $K=5376$
+(multigrid $3.9\times$ faster, $0.98\,$s vs.\ $3.85\,$s).
+Multigrid (standalone) iteration counts remain essentially constant at $16$--$27$
+across all split levels, confirming $K$-independence of the condition number on
+this flat geometry.
 IETI-DP iterations grow from $14$ to $29$; as explained in
 Section~\ref{subsec:theory}~(ii), the spectral bound~\eqref{eq:kappa-ieti}
 predicts roughly constant conditioning (since $H/h\approx\sqrt{N/K}\approx 5$
@@ -944,12 +961,13 @@ inter-method agreement, not solution accuracy.
 The reference case uses $p = 2$, $r = 4$: $N = 9\,078$ dofs, $\Lambda = 1024$
 Lagrange multipliers, $\nprim = 22$ primal dofs (corner constraints).
 Table~\ref{tab:reference} separates setup from solve.
-IETI-DP is the fastest solver both in solve alone ($0.006\,$s) and in total
-($0.123\,$s including setup), outperforming even direct Cholesky ($1.5\times$
-total) and $1.4\times$ cheaper than CG+multigrid overall.
-Unlike the yeti case, the setup cost is already amortized within a single solve:
-the extremely cheap solve phase ($0.006\,$s, $30\times$ faster than CG+multigrid)
-dominates the savings.
+IETI-DP has the fastest solve ($0.010\,$s), $5.3\times$ faster than the next best
+converging iterative method (CG+Jacobi at $0.053\,$s) and $1.8\times$ faster than
+Direct Cholesky ($0.018\,$s). Multigrid (standalone) and CG (no preconditioner) do
+not converge within 1000 iterations on this curved surface.
+The setup cost ($0.095\,$s) is amortized within approximately $2$ right-hand
+sides over CG+Jacobi (and $10$ over Direct Cholesky), making IETI-DP the
+preferred iterative solver for the multi-RHS regime.
 
 \begin{table}[t]
     \centering
@@ -964,19 +982,16 @@ dominates the savings.
         \toprule
         Method & setup [s] & solve [s] & iters & converged \\
         \midrule
-        Direct Cholesky                 & 0.058 & 0.020 & -    & yes \\
-        GMRES (no preconditioner)       & 0.058 & 1.73  & 452  & yes \\
-        GMRES + Jacobi                  & 0.058 & 0.63  & 296  & yes \\
-        GMRES + symmetric Gauss--Seidel & 0.058 & 0.30  & 134  & yes \\
-        GMRES + ILU                     & 0.088 & 0.070 & 109  & yes \\
-        GMRES + multigrid               & 0.067 & 0.086 & 36   & yes \\
-        CG (no preconditioner)          & 0.058 & 0.11  & 1000 & no  \\
-        CG + Jacobi                     & 0.058 & 0.054 & 381  & yes \\
-        CG + symmetric Gauss--Seidel    & 0.058 & 0.16  & 144  & yes \\
-        CG + ILU                        & 0.088 & 0.28  & 1000 & no  \\
-        CG + multigrid                  & 0.067 & 0.10  & 38   & yes \\
-        Multigrid (standalone)          & 0.067 & 2.55  & 1000 & no  \\
-        \textbf{IETI-DP}               & 0.117 & \textbf{0.006} & 26 & yes \\
+        Direct Cholesky                 & 0.015 & 0.018  & ---  & yes \\
+        GMRES (no preconditioner)       & 0.015 & 1.20   & 452  & yes \\
+        GMRES + Jacobi                  & 0.015 & 0.39   & 296  & yes \\
+        GMRES + symmetric Gauss--Seidel & 0.015 & 0.21   & 134  & yes \\
+        CG (no preconditioner)          & 0.015 & 0.10   & 1000 & no  \\
+        CG + Jacobi                     & 0.015 & 0.053  & 381  & yes \\
+        CG + symmetric Gauss--Seidel    & 0.015 & 0.16   & 144  & yes \\
+        Multigrid (standalone)          & 0.022 & 1.99   & 1000 & no  \\
+        IETI-DP (no prec)               & 0.095 & ---    & ---  & --- \\
+        \textbf{IETI-DP}                & 0.095 & \textbf{0.010} & 26 & yes \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1034,39 +1049,41 @@ per PCG iteration.
 
 \emph{(i)~Mesh resolution} (Figures~\ref{fig:teapot-time-r},
 \ref{fig:teapot-iters-r}):
-IETI-DP leads at every refinement level, reaching $9.4\times$ at $r=3$
-($0.0013\,$s vs.\ $0.013\,$s) and sustaining $6$--$11\times$ through $r=6$.
-A key distinction from the flat yeti domain: CG+multigrid iterations on the
-curved teapot surface grow from $23$ at $r=2$ to $117$ at $r=6$
-(Figure~\ref{fig:teapot-iters-r}), far from the $O(1)$ prediction for
-flat domains (Section~\ref{subsec:theory}).
-Laplace--Beltrami operators on non-flat surfaces can degrade the V-cycle
-contraction factor, explaining why IETI-DP's advantage grows rather than
-diminishes with $N$.
-IETI-DP iterations grow from $19$ at $r=2$ to $38$ at $r=6$, consistent
-with~\eqref{eq:kappa-ieti} (see the condition number verification in
-Section~\ref{subsec:theory}).
+IETI-DP leads at every refinement level, reaching $8.75\times$ at $r=2$
+($0.0004\,$s vs.\ $0.0035\,$s).
+A key distinction from the flat yeti domain: multigrid (standalone) converges
+only at $r=2$--$3$ (respectively $8.75\times$ and $4.8\times$ slower than
+IETI-DP) and fails to converge within 1000 iterations from $r=4$ onwards.
+The Laplace--Beltrami operator on the curved teapot surface degrades the
+V-cycle contraction factor, leading to multigrid divergence rather than merely
+slow convergence---in stark contrast to the flat-domain $O(1)$ prediction of
+Section~\ref{subsec:theory}.
+IETI-DP instead converges robustly at every level, with iterations growing from
+$19$ at $r=2$ to $38$ at $r=6$, consistent with~\eqref{eq:kappa-ieti} (see the
+condition number verification in Section~\ref{subsec:theory}).
 
 \emph{(ii)~Polynomial degree} (Figures~\ref{fig:teapot-time-p},
 \ref{fig:teapot-iters-p}):
-IETI-DP leads at every $p$; the gap grows from $3.5\times$ at $p=1$ to
-$26\times$ at $p=6$ ($0.007\,$s vs.\ $0.19\,$s).
-CG+multigrid iterations increase from $19$ to $146$ while IETI-DP iterations
-grow from $16$ to only $25$ (Figure~\ref{fig:teapot-iters-p}), confirming
-that multigrid smoother deterioration---not the IETI interface problem---drives
-the widening cost gap.
+IETI-DP leads at every $p$; the gap grows from $4.5\times$ at $p=1$
+($0.0002\,$s vs.\ $0.0009\,$s) to over $594\times$ at $p=6$ ($0.002\,$s
+vs.\ $1.31\,$s), with multigrid failing to converge at $p=6$.
+Multigrid (standalone) iterations increase from $24$ at $p=1$ to $1000$ at
+$p=6$ (diverging), while IETI-DP iterations grow from $16$ to only $25$
+(Figure~\ref{fig:teapot-iters-p}), confirming that multigrid smoother
+deterioration---not the IETI interface problem---drives the widening cost gap.
 
 \emph{(iii)~Number of subdomains} (Figures~\ref{fig:teapot-time-K},
 \ref{fig:teapot-iters-K}):
-IETI-DP leads for $K\leq 2048$: $6.8\times$ at $K=32$, $2.9\times$ at
-$K=128$, $1.7\times$ at $K=512$, and $1.4\times$ at $K=2048$.
-At $K=8192$ the roles reverse: multigrid is $3.1\times$ faster ($15.3\,$s
-vs.\ $47.6\,$s).
-Both IETI-DP and CG+multigrid iteration counts grow with $K$ (from $19$ to
-$125$ and $23$ to $160$, respectively), yet multigrid retains a cheaper
-per-iteration basis as the Lagrange multiplier count scales with $K$.
-The crossover is the algebraic cost of IETI-DP interface solves overtaking
-the benefit of its $O(\log N)$ spectral bound.
+Multigrid (standalone) converges for $K\leq 512$, with IETI-DP $8.75\times$
+faster at $K=32$ and $2.8\times$ at $K=512$; it fails to converge within
+1000 iterations for $K\geq 2048$ on this curved surface.
+IETI-DP iteration counts grow from $19$ at $K=32$ to $125$ at $K=8192$.
+At $K\geq 2048$, multigrid, unpreconditioned CG and GMRES also diverge;
+among iterative solvers, IETI-DP remains fastest (followed by CG and GMRES
+with symmetric Gauss-Seidel), while the increasing Lagrange multiplier count
+drives up the per-iteration cost.
+The $O(\log N)$ spectral bound~\eqref{eq:kappa-ieti} limits the iteration
+growth despite the large number of subdomains.
 
 
 
@@ -1089,6 +1106,9 @@ the benefit of its $O(\log N)$ spectral bound.
 
     \bibitem{kleiss2012ieti}
     Kleiss, S.K., Pechstein, C., Jüttler, B. and Tomar, S., 2012. IETI–isogeometric tearing and interconnecting. Computer methods in applied mechanics and engineering, 247, pp.201-215.
+
+    \bibitem{schneckenleitner2020condition}
+    Schneckenleitner, R. and Takacs, S., 2020. Condition number bounds for IETI-DP methods that are explicit in $h$ and $p$. Mathematical Models and Methods in Applied Sciences, 30(11), pp.2067--2103.
 
     \bibitem{farhat1991method}
     Farhat, C. and Roux, F.X., 1991. A method of finite element tearing and interconnecting and its parallel solution algorithm. International Journal for Numerical Methods in Engineering, 32(6), pp.1205-1227.
