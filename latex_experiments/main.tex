@@ -698,48 +698,52 @@ $O\!\left(N^{1/2}\right)=O\!\left((K n_k)^{1/2}\right)$
 scaling with an improved (but not asymptotically better) constant.
 
 \paragraph{GMRES.}
-For the SPD systems arising from~\eqref{eq:poisson-strong}, the convergence
-bound~\cite[Cor.~6.33]{saad2003iterative} reduces to the CG bound~\cite[Thm.~6.29]{saad2003iterative},
-giving the same $O\!\left(N^{1/2}\right)=O\!\left((K n_k)^{1/2}\right)$ iteration
-count and $O\!\left(N^{3/2}\right)=O\!\left(K^{3/2} n_k^{3/2}\right)$ total cost.
-The condition number and degree scaling are identical to the CG case.
+GMRES bounds the residual in the Euclidean $2$-norm $\|r_k\|_2$ ($r_k=b-Ax_k$),
+not the error energy norm~\cite[Cor.~6.33]{saad2003iterative}. For the normal SPD
+system of~\eqref{eq:poisson-strong} that bound reduces to
+$\|r_k\|_2\le 2\bigl(\tfrac{\sqrt{\kappa(A)}-1}{\sqrt{\kappa(A)}+1}\bigr)^{k}\|r_0\|_2$,
+the same Chebyshev factor as the CG error bound~\cite[Thm.~6.29]{saad2003iterative}.
+Hence the same $O\!\left(N^{1/2}\right)=O\!\left((K n_k)^{1/2}\right)$ iteration
+count, $O\!\left(N^{3/2}\right)=O\!\left(K^{3/2} n_k^{3/2}\right)$ total cost, and
+condition-number and degree scaling as CG.
 
 \paragraph{Multigrid.}
 For an $H^{2}$-regular elliptic problem on a quasi-uniform mesh of a flat domain,
 the symmetric $V$-cycle with one pre- and one post-smoothing step satisfies the
 smoothing and approximation properties of the variational multigrid theory and
 therefore admits a contraction factor $\rho<1$ bounded independently of the mesh
-size $h$~\cite[Ch.~7]{hackbusch1994iterative},~\cite[\S2.3]{trottenberg2000multigrid}.
+size $h$~\cite{trottenberg2000multigrid}.
 Used as a preconditioner this yields $\kappa(M_{\mathrm{MG}}^{-1}A)=O(1)$, hence
 $O(1)$ iterations and an optimal $O(N)$ total solve cost.
 This $h$-robustness is, however, neither uniform in the degree $p$ nor uniform
-under strong geometric distortion.
+under strong geometric distortion; both properties are observed in
+Section~\ref{subsubsec:bench-3d-sweeps}.
 
-\emph{Degree.}
+\begin{itemize}
+\item[(i)] \textbf{Degree.}
 For tensor-product splines of degree $p$, the spectral (symbol) analysis of the
 Galerkin matrices shows that a fixed-size subspace of high-frequency,
 maximal-continuity ($C^{p-1}$) modes is increasingly poorly damped by classical
 point smoothers (Jacobi, Gauss--Seidel) as $p$ grows; consequently the
 contraction factor of the standard $V$-cycle deteriorates towards $1$ and the
 iteration count grows with $p$~\cite{donatelli2015robust,tielen2020pmultigrid}.
-Restoring $p$-robustness requires spectrally corrected (multi-iterative)
-smoothers~\cite{donatelli2015robust} or smoothers based on stable splittings of
-the spline space, for which a contraction factor independent of both $h$ and $p$
-has been proved~\cite{hofreither2017robust}; the standard point-smoothed
-$V$-cycle used here is deliberately taken as the baseline.
-
-\emph{Geometry.}
+% Restoring $p$-robustness requires spectrally corrected (multi-iterative)
+% smoothers~\cite{donatelli2015robust} or smoothers based on stable splittings of
+% the spline space, for which a contraction factor independent of both $h$ and $p$
+% has been proved~\cite{hofreither2017robust}; the standard point-smoothed
+% $V$-cycle used here is deliberately taken as the baseline.
+\item[(ii)] \textbf{Geometry.}
 On a curved manifold the diffusion bilinear form pulls back to an elliptic
 problem on $\refdom$ with the spatially varying, generally anisotropic
 coefficient tensor $\sqrt{\det G}\,G^{-1}$, where $G=J_{\gmap}^{\top}J_{\gmap}$ is
-the first fundamental form of the geometry map
-(Eq.~\eqref{eq:laplace-beltrami}, Section~\ref{subsec:bench-3d}).
+the first fundamental form of the geometry map, see Eq.~\eqref{eq:laplace-beltrami}.
 Strong, geometry-induced anisotropy and variation of $G^{-1}$ violate the
 constant-coefficient heuristics behind isotropic $h$-coarsening with point
 smoothers: the smoothing property degrades, the contraction factor need not stay
 below $1$, and the iteration count may grow with $N$ or stagnate
-altogether~\cite{hackbusch1994iterative,trottenberg2000multigrid} (observed in
-Section~\ref{subsubsec:bench-3d-sweeps}).
+altogether~\cite{trottenberg2000multigrid}.
+\end{itemize}
+
 
 \paragraph{IETI-DP with scaled Dirichlet preconditioner.}
 The spectral bound for the preconditioned interface
