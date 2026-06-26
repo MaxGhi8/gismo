@@ -439,7 +439,7 @@ def _curve_ref(ax, fn, label, xs_data, ys_data, y_frac=0.20,
         if ratios:
             log_loose = math.log10(max(ratios) * 1.25)
             log_tight = math.log10(min(ratios))
-            log_C = 0.5 * (log_loose + log_tight) if anchor_tight else log_loose
+            log_C = log_tight if anchor_tight else log_loose
         else:
             log_C = ly_min + y_frac * (ly_max - ly_min) - math.log10(ref_vals[0])
     else:
@@ -557,7 +557,7 @@ def plot(cfg):
         xkey   = ax_cfg["xkey"]
         xlabel = ax_cfg["xlabel"]
 
-        # ---- solve-time figure: log-log, x = natural sweep parameter ----
+        # ---- solve-time figure: log-log (degree sweep: semilog-y), x = natural sweep parameter ----
         fig, ax = plt.subplots(figsize=(7, 5))
         all_xs, all_ys = [], []
         for method_name, style, color, label in METHODS:
@@ -567,7 +567,7 @@ def plot(cfg):
             ax.plot(xs, solve, style, color=color, label=label)
             all_xs.extend(xs)
             all_ys.extend(solve)
-        ax.set_xscale("log")
+        ax.set_xscale("linear" if sweep == "degree" else "log")
         ax.set_yscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel("solve time [s]  (mean of 10 runs)")
@@ -594,7 +594,7 @@ def plot(cfg):
         plt.close(fig)
         print(f"wrote {path}")
 
-        # ---- iteration-count figure: log-log, x = natural sweep parameter ----
+        # ---- iteration-count figure: log-log (degree sweep: semilog-y), x = natural sweep parameter ----
         fig2, ax2 = plt.subplots(figsize=(7, 5))
         has_data = False
         all_xs2, all_ys2 = [], []
@@ -610,7 +610,7 @@ def plot(cfg):
             all_ys2.extend(yi)
             has_data = True
         if has_data:
-            ax2.set_xscale("log")
+            ax2.set_xscale("linear" if sweep == "degree" else "log")
             ax2.set_yscale("log")
             ax2.set_xlabel(xlabel)
             ax2.set_ylabel("iteration count (mean of 10 runs)")
