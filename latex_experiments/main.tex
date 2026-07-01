@@ -807,7 +807,7 @@ the cost of the resolution of the interface problem~\eqref{eq:ieti-schur}.
 \subsection{Two-dimensional benchmark: yeti domain}
 \label{subsec:bench-2d}
 
-The yeti domain is a planar multiply-connected B-spline multipatch domain with
+The yeti domain is a planar B-spline multipatch domain with
 $\npatch = 21$ patches (Figure~\ref{fig:yeti-refcase}), all sides Dirichlet.
 
 \begin{figure}[!ht]
@@ -829,24 +829,19 @@ $\npatch = 21$ patches (Figure~\ref{fig:yeti-refcase}), all sides Dirichlet.
         \caption{Computed solution}
         \label{fig:yeti-refcase-sol}
     \end{subfigure}
-    \caption{Reference case (yeti domain, $21$ patches, $p = 2$, $r = 3$):
-    the multipatch discretization, the source term, and the IETI solution.}
+    \caption{The reference 2D case is the yeti domain, we represent:
+     the multipatch discretization in Fig. \ref{fig:yeti-refcase-mesh}, 
+     the source term in Fig. \ref{fig:yeti-refcase-rhs}, and the IETI solution in Fig. \ref{fig:yeti-refcase-sol}.}
     \label{fig:yeti-refcase}
 \end{figure}
 
 \subsubsection{Reference case} \label{subsubsec:bench-2d-reference}
 
 The reference case uses $p = 2$, $r = 4$: $N = 87\,552$ dofs, $\Lambda = 1536$
-Lagrange multipliers. Every patch corner is a Dirichlet node, so $\nprim = 0$
-and IETI-DP reduces to plain IETI. Table~\ref{tab:yeti-reference} separates
+Lagrange multipliers. Every patch corner is a Dirichlet node. Table~\ref{tab:yeti-reference} separates
 setup (one-time local Cholesky factorization) from solve (Krylov iterations).
-IETI-DP has the cheapest solve at $0.12\,$s ($5.8\times$
-faster than multigrid standalone at $0.69\,$s), but an expensive setup ($2.44\,$s,
-the $K=21$ local Cholesky factorizations) that requires approximately $4$
-right-hand sides to amortize over multigrid standalone.
-The parameter-study figures report solve-only time, corresponding to the
-multi-RHS regime for which IETI-DP is designed; in a parallel setting the
-setup cost would also reduce proportionally.
+IETI-DP has the cheapest solve at $0.12\,$s, $5.8\times$
+faster than multigrid standalone at $0.69\,$s.
 
 \begin{table}[t]
     \centering
@@ -1174,11 +1169,20 @@ consistent with their $\kappa(A)\sim K$ growth (Section~\ref{subsec:theory});
 among iterative solvers, IETI-DP remains fastest (followed by CG and GMRES
 with symmetric Gauss-Seidel), while the increasing Lagrange multiplier count
 drives up the per-iteration cost.
-The conditioning bound~\eqref{eq:kappa-ieti} is independent of $K$
-(Section~\ref{subsec:theory}~(ii)), so the IETI-DP growth from $19$ to $125$
-remains far milder than the $O(\sqrt{K})$ trend of the global Krylov solvers and
-reflects the constant in the bound and the inexact coarse solve rather than a
-genuine power of $K$.
+The bound~\eqref{eq:kappa-ieti} is independent of $K$
+(Section~\ref{subsec:theory}~(ii)), but that estimate is a flat-domain result.
+On the planar yeti domain, using the identical primal space and the same exact
+(sparse Cholesky) coarse solve, both IETI-DP and multigrid iteration counts stay
+essentially constant in $K$ (IETI-DP $14\!\to\!29$ over the same range,
+Figure~\ref{fig:yeti-iters-K}), confirming the prediction. On the curved teapot
+the Laplace--Beltrami coefficient $\sqrt{\det G}\,G^{-1}$
+(Eq.~\eqref{eq:laplace-beltrami}) is spatially varying and anisotropic, and since
+each split also drives $h\sim K^{-1/2}\to 0$, finer meshes resolve ever stronger
+geometric distortion as $K$ grows; the shape-regularity and mild-coefficient
+hypotheses behind both $K$-independence results then fail. The IETI-DP growth
+$19\!\to\!125$ thus drifts towards the unpreconditioned $O(\sqrt{K})$ rate, the
+same geometry-induced degradation that breaks the multigrid smoother, though it
+remains far milder than that of the global Krylov solvers.
 
 
 
