@@ -25,16 +25,14 @@
 
     NOTE: the bundled model
         filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
-    was trained on the yeti domain's 21 *native* (non-square) patches at
-    degree 2 / 2 refinements (Nmax=144, Smax=24) -- see the version of
-    ieti_dataset_generation_example.cpp predating its --SquareDiscretization
-    option. The current --SquareDiscretization=global default produces
-    larger, uniform patches (e.g. Nmax~300 at -r 2 -p 2) that exceed that
-    old model's capacity; regenerate the training data with the new default
-    and retrain before expecting this model to run without a
-    padding-capacity GISMO_ENSURE failure. Pass --SquareDiscretization off
-    to reproduce the original (native-mesh) training discretization the
-    bundled model actually supports.
+    was retrained on the yeti domain's 21 patches under the current
+    --SquareDiscretization=global default at degree 2 / 2 refinements
+    (Nmax=304, Smax=48). Using a coarser/finer discretization, a different
+    degree, or --SquareDiscretization off (native, non-square patches) may
+    produce per-patch (N, S) that this model was not trained for -- values
+    exceeding Nmax/Smax trigger the padding-capacity GISMO_ENSURE below;
+    values well below it will still run but are out-of-distribution for
+    the model.
 
     Model contract (the user supplies a compatible ONNX model):
 

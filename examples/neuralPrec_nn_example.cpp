@@ -7,9 +7,9 @@
         filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
     has the following I/O:
 
-        input  'input' : float[1, 24]       <-- residual on skeleton DOFs
-        input  'obj.1' : float[1, 144, 4]   <-- geometry features per local DOF
-        output 'output': float[1, 24]       <-- preconditioned vector on skeleton DOFs
+        input  'input' : float[1, 48]       <-- residual on skeleton DOFs
+        input  'obj.1' : float[1, 304, 4]   <-- geometry features per local DOF
+        output 'output': float[1, 48]       <-- preconditioned vector on skeleton DOFs
 
     This example creates two dummy tensors with those shapes, hands them
     to gsNeuralPrec, runs apply() a few times, and prints a small slice
@@ -66,9 +66,9 @@ int main(int argc, char * argv[])
     gsInfo << "CUDA  : " << (use_cuda ? "yes" : "no") << "\n";
 
     // The model expects:
-    //   primary input  "input"  : 24 values    (residual on skeleton DOFs)
-    //   aux     input  "obj.1"  : 144 * 4 = 576 values (geometry features per local DOF)
-    //   output         "output" : 24 values    (skeleton DOFs)
+    //   primary input  "input"  : 48 values    (residual on skeleton DOFs)
+    //   aux     input  "obj.1"  : 304 * 4 = 1216 values (geometry features per local DOF)
+    //   output         "output" : 48 values    (skeleton DOFs)
     gsNeuralPrec<real_t> nnPrec(
         model_path, "input", "output", use_cuda
     );
@@ -77,14 +77,14 @@ int main(int argc, char * argv[])
            << "  cols=" << nnPrec.cols() << "\n";
 
     // --- Build the auxiliary geometry tensor ---------------------------------
-    // ONNX shape [1, 144, 4] is row-major: for each of the 144 local DOFs, the
+    // ONNX shape [1, 304, 4] is row-major: for each of the 304 local DOFs, the
     // 4 features are contiguous in memory. gsMatrix is column-major, so to
-    // match that layout we use a (4 x 144) matrix where each COLUMN is one
+    // match that layout we use a (4 x 304) matrix where each COLUMN is one
     // DOF's 4-feature vector. The flat buffer .data() then iterates
     // DOF-by-DOF, feature-by-feature, which is exactly what the model
     // expects.
-    const index_t n_local     = 144;   // local DOFs (geometry conditioning)
-    const index_t n_skeleton  = 24;    // skeleton DOFs (primary input/output)
+    const index_t n_local     = 304;   // local DOFs (geometry conditioning)
+    const index_t n_skeleton  = 48;    // skeleton DOFs (primary input/output)
     const index_t n_features  = 4;
     gsMatrix<real_t> geom(n_features, n_local);
     geom.setRandom();   // dummy geometry features in [-1, 1]
@@ -121,18 +121,18 @@ int main(int argc, char * argv[])
     const std::string csv_dir = GISMO_DATA_DIR "onnx_models/";
     const std::string prefix  = "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer_";
 
-    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 24x1
-    gsMatrix<real_t> ref_input1  = loadCsvRow(csv_dir + prefix + "input_1.csv");  // 576x1
-    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "output.csv");   // 24x1
+    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 48x1
+    gsMatrix<real_t> ref_input1  = loadCsvRow(csv_dir + prefix + "input_1.csv");  // 1216x1
+    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "output.csv");   // 48x1
 
     gsInfo << "Loaded CSV: input_0=" << ref_input0.size()
            << "  input_1=" << ref_input1.size()
            << "  output=" << ref_output.size() << "\n";
 
-    // obj.1 is stored flat as [1,144,4] row-major → 576 values.
-    // setAuxiliaryInput expects a (4 x 144) column-major matrix (same memory layout).
-    gsMatrix<real_t> ref_geom = ref_input1;   // already 576x1, castIn reads .data() sequentially
-    ref_geom.resize(n_features, n_local);     // reshape in-place: (4 x 144), same data order
+    // obj.1 is stored flat as [1,304,4] row-major → 1216 values.
+    // setAuxiliaryInput expects a (4 x 304) column-major matrix (same memory layout).
+    gsMatrix<real_t> ref_geom = ref_input1;   // already 1216x1, castIn reads .data() sequentially
+    ref_geom.resize(n_features, n_local);     // reshape in-place: (4 x 304), same data order
 
     nnPrec.setAuxiliaryInput("obj.1", ref_geom);
 
