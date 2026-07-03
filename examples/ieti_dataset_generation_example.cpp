@@ -68,6 +68,7 @@ int main(int argc, char *argv[])
     std::string boundaryConditions("d");
     index_t numSamples = 20000;
     index_t seed = 0;
+    std::string probeType("grf");
     std::string out("yeti_dataset.csv");
     bool plot = false;
     index_t plotPatch = 0;
@@ -84,12 +85,20 @@ int main(int argc, char *argv[])
     cmd.addString("b", "BoundaryConditions", "Boundary conditions (only 'd' supported)", boundaryConditions);
     cmd.addInt   ("n", "NumSamples",         "Total number of probe/target samples across all patches", numSamples);
     cmd.addInt   ("",  "seed",               "RNG seed", seed);
+    cmd.addString("",  "probeType",          "Probe distribution: 'grf' (Gaussian random field, default) | 'iid' (i.i.d. standard normal)", probeType);
     cmd.addString("o", "out",                "Output CSV path", out);
     cmd.addSwitch(     "plot",               "Write one (patch, sample) probe/target pair to ParaView", plot);
     cmd.addInt   ("",  "plotPatch",          "Patch index to plot (requires --plot)", plotPatch);
     cmd.addInt   ("",  "plotSample",         "Sample index within that patch to plot (requires --plot)", plotSample);
 
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
+
+    if (probeType != "grf" && probeType != "iid")
+    {
+        gsInfo << "Invalid --probeType '" << probeType
+               << "'. Use 'grf' (Gaussian random field) or 'iid' (i.i.d. standard normal).\n";
+        return EXIT_FAILURE;
+    }
 
     if ( ! gsFileManager::fileExists(geometry) )
     {
@@ -268,7 +277,7 @@ int main(int argc, char *argv[])
         gsInfo << "Verification (patch 0): max |S_builtin*v - S_dense*v| = " << maxDiff << "\n";
     }
 
-    /************ Gaussian-random-field probe sampling ***********/
+    /************ Probe sampling ***********/
 
     struct SampleData
     {
@@ -280,6 +289,8 @@ int main(int argc, char *argv[])
 
     std::mt19937_64 rng(static_cast<std::uint64_t>(seed));
     std::normal_distribution<real_t> normal(0.0, 1.0);
+
+    const bool useGRF = (probeType == "grf");
 
     const real_t sigma   = 1.0;
     const real_t d_param = 0.05;
@@ -294,26 +305,29 @@ int main(int argc, char *argv[])
         const index_t ns = skel.size();
         const index_t nSamplesK = base + (k < rem ? 1 : 0);
 
-        gsMatrix<> cov(ns, ns);
-        for (index_t a = 0; a < ns; ++a)
+        gsMatrix<> L;  // Cholesky factor for GRF; unused for i.i.d.
+        if (useGRF)
         {
-            const real_t xa = patches[k].zeta(skel[a],0);
-            const real_t ya = patches[k].zeta(skel[a],1);
-            const real_t za = patches[k].zeta(skel[a],2);
-            for (index_t b = 0; b < ns; ++b)
+            gsMatrix<> cov(ns, ns);
+            for (index_t a = 0; a < ns; ++a)
             {
-                const real_t xb = patches[k].zeta(skel[b],0);
-                const real_t yb = patches[k].zeta(skel[b],1);
-                const real_t zb = patches[k].zeta(skel[b],2);
-                const real_t dist = std::sqrt( (xa-xb)*(xa-xb) + (ya-yb)*(ya-yb) + (za-zb)*(za-zb) );
-                cov(a,b) = sigma*sigma*std::exp(-dist/lambda);
+                const real_t xa = patches[k].zeta(skel[a],0);
+                const real_t ya = patches[k].zeta(skel[a],1);
+                const real_t za = patches[k].zeta(skel[a],2);
+                for (index_t b = 0; b < ns; ++b)
+                {
+                    const real_t xb = patches[k].zeta(skel[b],0);
+                    const real_t yb = patches[k].zeta(skel[b],1);
+                    const real_t zb = patches[k].zeta(skel[b],2);
+                    const real_t dist = std::sqrt( (xa-xb)*(xa-xb) + (ya-yb)*(ya-yb) + (za-zb)*(za-zb) );
+                    cov(a,b) = sigma*sigma*std::exp(-dist/lambda);
+                }
             }
+            auto llt = cov.llt();
+            GISMO_ENSURE(llt.info() == gsEigen::Success,
+                "GRF covariance matrix is not positive definite for patch " << k);
+            L = llt.matrixL();
         }
-
-        auto llt = cov.llt();
-        GISMO_ENSURE(llt.info() == gsEigen::Success,
-            "GRF covariance matrix is not positive definite for patch " << k);
-        gsMatrix<> L = llt.matrixL();
 
         SampleData & sd = samples[k];
         sd.dirichlet.resize(ns, nSamplesK);
@@ -321,10 +335,19 @@ int main(int argc, char *argv[])
 
         for (index_t s = 0; s < nSamplesK; ++s)
         {
-            gsMatrix<> z(ns,1);
-            for (index_t i = 0; i < ns; ++i)
-                z(i,0) = normal(rng);
-            gsMatrix<> v = L * z;
+            gsMatrix<> v(ns,1);
+            if (useGRF)
+            {
+                gsMatrix<> z(ns,1);
+                for (index_t i = 0; i < ns; ++i)
+                    z(i,0) = normal(rng);
+                v = L * z;
+            }
+            else
+            {
+                for (index_t i = 0; i < ns; ++i)
+                    v(i,0) = normal(rng);
+            }
 
             gsMatrix<> y;
             schurOps[k]->apply(v, y);
@@ -333,7 +356,8 @@ int main(int argc, char *argv[])
             sd.output.col(s)    = y;
         }
 
-        gsInfo << "Patch " << k << ": generated " << nSamplesK << " samples.\n";
+        gsInfo << "Patch " << k << ": generated " << nSamplesK
+               << " samples (" << (useGRF ? "GRF" : "i.i.d.") << ").\n";
     }
 
     /********************** Write output CSV **********************/
