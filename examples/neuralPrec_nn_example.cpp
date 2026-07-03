@@ -4,12 +4,12 @@
     evaluates it on dummy inputs.
 
     The bundled model
-        filedata/onnx_models/best_model_Transformer_homogeneous_neumann_l_0_deg_2_crazygeom_h40_new.onnx
+        filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
     has the following I/O:
 
-        input  'input' : float[1, 625]      <-- residual / dof vector
-        input  'obj.1' : float[1, 625, 4]   <-- geometry features per dof
-        output 'output': float[1, 625]      <-- preconditioned vector
+        input  'input' : float[1, 24]       <-- residual on skeleton DOFs
+        input  'obj.1' : float[1, 144, 4]   <-- geometry features per local DOF
+        output 'output': float[1, 24]       <-- preconditioned vector on skeleton DOFs
 
     This example creates two dummy tensors with those shapes, hands them
     to gsNeuralPrec, runs apply() a few times, and prints a small slice
@@ -51,7 +51,7 @@ int main(int argc, char * argv[])
 {
     std::string model_path =
         GISMO_DATA_DIR "onnx_models/"
-        "best_model_Transformer_homogeneous_neumann_l_0_deg_2_crazygeom_h40_H3_realSPD.onnx";
+        "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx";
 
     bool use_cuda  = false;
     int  n_repeats = 3;
@@ -66,9 +66,9 @@ int main(int argc, char * argv[])
     gsInfo << "CUDA  : " << (use_cuda ? "yes" : "no") << "\n";
 
     // The model expects:
-    //   primary input  "input"  : 625 values   (dofs / residual)
-    //   aux     input  "obj.1"  : 625 * 4 = 2500 values (geometry features)
-    //   output         "output" : 625 values
+    //   primary input  "input"  : 24 values    (residual on skeleton DOFs)
+    //   aux     input  "obj.1"  : 144 * 4 = 576 values (geometry features per local DOF)
+    //   output         "output" : 24 values    (skeleton DOFs)
     gsNeuralPrec<real_t> nnPrec(
         model_path, "input", "output", use_cuda
     );
@@ -77,21 +77,22 @@ int main(int argc, char * argv[])
            << "  cols=" << nnPrec.cols() << "\n";
 
     // --- Build the auxiliary geometry tensor ---------------------------------
-    // ONNX shape [1, 625, 4] is row-major: for each of the 625 points, the
+    // ONNX shape [1, 144, 4] is row-major: for each of the 144 local DOFs, the
     // 4 features are contiguous in memory. gsMatrix is column-major, so to
-    // match that layout we use a (4 x 625) matrix where each COLUMN is one
-    // point's 4-feature vector. The flat buffer .data() then iterates
-    // point-by-point, feature-by-feature, which is exactly what the model
+    // match that layout we use a (4 x 144) matrix where each COLUMN is one
+    // DOF's 4-feature vector. The flat buffer .data() then iterates
+    // DOF-by-DOF, feature-by-feature, which is exactly what the model
     // expects.
-    const index_t n_points   = 625;
-    const index_t n_features = 4;
-    gsMatrix<real_t> geom(n_features, n_points);
+    const index_t n_local     = 144;   // local DOFs (geometry conditioning)
+    const index_t n_skeleton  = 24;    // skeleton DOFs (primary input/output)
+    const index_t n_features  = 4;
+    gsMatrix<real_t> geom(n_features, n_local);
     geom.setRandom();   // dummy geometry features in [-1, 1]
 
     nnPrec.setAuxiliaryInput("obj.1", geom);
 
     // --- Build the primary input (dof vector) and apply ---------------------
-    gsMatrix<real_t> dofs(n_points, 1);
+    gsMatrix<real_t> dofs(n_skeleton, 1);
     gsMatrix<real_t> out;
 
     // Warm-up (JIT compilation, GPU transfer, etc. happen on first call)
@@ -118,20 +119,20 @@ int main(int argc, char * argv[])
     gsInfo << "\n--- Sanity check against saved CSV reference ---\n";
 
     const std::string csv_dir = GISMO_DATA_DIR "onnx_models/";
-    const std::string prefix  = "model_GeometryConditionedLinearOperator_best_AFIETI_transformer_";
+    const std::string prefix  = "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer_";
 
-    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 625x1
-    gsMatrix<real_t> ref_input1  = loadCsvRow(csv_dir + prefix + "input_1.csv");  // 2500x1
-    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "output.csv");   // 625x1
+    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 24x1
+    gsMatrix<real_t> ref_input1  = loadCsvRow(csv_dir + prefix + "input_1.csv");  // 576x1
+    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "output.csv");   // 24x1
 
     gsInfo << "Loaded CSV: input_0=" << ref_input0.size()
            << "  input_1=" << ref_input1.size()
            << "  output=" << ref_output.size() << "\n";
 
-    // obj.1 is stored flat as [1,625,4] row-major → 2500 values.
-    // setAuxiliaryInput expects a (4 x 625) column-major matrix (same memory layout).
-    gsMatrix<real_t> ref_geom = ref_input1;   // already 2500x1, castIn reads .data() sequentially
-    ref_geom.resize(n_features, n_points);    // reshape in-place: (4 x 625), same data order
+    // obj.1 is stored flat as [1,144,4] row-major → 576 values.
+    // setAuxiliaryInput expects a (4 x 144) column-major matrix (same memory layout).
+    gsMatrix<real_t> ref_geom = ref_input1;   // already 576x1, castIn reads .data() sequentially
+    ref_geom.resize(n_features, n_local);     // reshape in-place: (4 x 144), same data order
 
     nnPrec.setAuxiliaryInput("obj.1", ref_geom);
 

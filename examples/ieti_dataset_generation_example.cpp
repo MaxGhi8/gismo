@@ -2,7 +2,8 @@
 
     @brief Generates a training dataset for the neural Schur operator.
 
-    For each of the yeti domain's 21 fixed patches, this computes the exact
+    For each patch of the domain (21 for the default yeti geometry; use
+    --SplitPatches to subdivide it further), this computes the exact
     local Dirichlet Schur complement S_k (via gsScaledDirichletPrec, reusing
     gsIetiMapper only to find each patch's skeleton dofs -- no global IETI
     solve, no primal system), draws Gaussian-random-field probe vectors v on
@@ -16,6 +17,7 @@
 #include <iomanip>
 #include <limits>
 #include <gismo.h>
+#include "gsBenchDiscretization.h"
 
 using namespace gismo;
 
@@ -58,8 +60,11 @@ int main(int argc, char *argv[])
     /************** Define command line options *************/
 
     std::string geometry("domain2d/yeti_mp2.xml");
+    index_t splitPatches = 0;
+    real_t stretchGeometry = 1;
     index_t refinements = 2;
     index_t degree = 2;
+    std::string squareDiscr("global");
     std::string boundaryConditions("d");
     index_t numSamples = 20000;
     index_t seed = 0;
@@ -71,8 +76,11 @@ int main(int argc, char *argv[])
     gsCmdLine cmd("Generates a training dataset for the neural Schur operator "
                   "from the yeti domain's local Dirichlet Schur complements.");
     cmd.addString("g", "Geometry",           "Geometry file", geometry);
+    cmd.addInt   ("",  "SplitPatches",       "Split every patch that many times in 2^d patches", splitPatches);
+    cmd.addReal  ("",  "StretchGeometry",    "Stretch geometry in x-direction by the given factor", stretchGeometry);
     cmd.addInt   ("r", "Refinements",        "Number of uniform h-refinement steps", refinements);
     cmd.addInt   ("p", "Degree",             "Degree of the B-spline discretization space", degree);
+    cmd.addString("",  "SquareDiscretization","Element equalisation: off (native, patches differ) | global (all patches identical)", squareDiscr);
     cmd.addString("b", "BoundaryConditions", "Boundary conditions (only 'd' supported)", boundaryConditions);
     cmd.addInt   ("n", "NumSamples",         "Total number of probe/target samples across all patches", numSamples);
     cmd.addInt   ("",  "seed",               "RNG seed", seed);
@@ -102,11 +110,38 @@ int main(int argc, char *argv[])
     }
     gsMultiPatch<>& mp = *mpPtr;
 
-    gsMultiBasis<> mb(mp);
-    for ( size_t i = 0; i < mb.nBases(); ++ i )
-        mb[i].setDegreePreservingMultiplicity(degree);
-    for ( index_t i = 0; i < refinements; ++i )
-        mb.uniformRefine();
+    // Ensure a usable topology BEFORE splitting (see solver_benchmark_example.cpp
+    // for the rationale): CAD formats like IGES/STEP arrive with no registered
+    // interfaces, so recover the topology by geometric matching first, or a
+    // subsequent uniformSplit()/IETI setup would silently treat every patch side
+    // as an unglued boundary.
+    if (mp.nInterfaces() == 0)
+    {
+        gsInfo << "(no interfaces registered, computing topology) " << std::flush;
+        mp.computeTopology();
+    }
+
+    for (index_t i=0; i<splitPatches; ++i)
+    {
+        gsInfo << "split patches uniformly... " << std::flush;
+        mp = mp.uniformSplit();
+    }
+
+    if (stretchGeometry!=1)
+    {
+        gsInfo << "and stretch it... " << std::flush;
+        for (size_t i=0; i!=mp.nPatches(); ++i)
+            const_cast<gsGeometry<>&>(mp[i]).scale(stretchGeometry,0);
+    }
+
+    // --SquareDiscretization global (default) makes every patch's raw basis
+    // (mb[k].size()) identical, matching solver_benchmark_example.cpp. The
+    // CSV's n_local/n_skeleton (free/skeleton dofs, AFTER Dirichlet
+    // elimination) can still differ per patch: how many sides are an
+    // interface vs. the outer Dirichlet boundary depends on patch topology,
+    // not mesh resolution.
+    gsMultiBasis<> mb = makeBenchBasis(mp, degree, refinements, squareDiscr);
+    makeInterfacesConforming(mp, mb);
 
     /************** Define boundary conditions **************/
 

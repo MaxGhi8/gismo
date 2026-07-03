@@ -8,20 +8,47 @@
     is loaded per patch and bound to that patch's geometry features, then
     plugged into gsScaledDirichletPrec as the per-patch Schur operator.
 
+    Discretization: --SquareDiscretization (default "global") uses the same
+    makeBenchBasis()/makeInterfacesConforming() helpers as
+    solver_benchmark_example.cpp and ieti_dataset_generation_example.cpp
+    (see gsBenchDiscretization.h), so every patch gets an identical raw
+    basis (mb[k].size()). Even so, per-patch free-dof / skeleton-dof counts
+    (N, S) after Dirichlet elimination can still differ slightly, since
+    they depend on how many sides of a patch are an interface vs. the outer
+    Dirichlet boundary (topology), not on mesh resolution.
+
+    Because a given ONNX export has a fixed input shape, every patch's
+    actual (N, S) is zero-padded up to the model's declared max (Nmax,
+    Smax) before calling it, and the output is truncated back to S -- see
+    gsNeuralSchurOp below. Nmax/Smax are read from the model's own declared
+    input shapes.
+
+    NOTE: the bundled model
+        filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
+    was trained on the yeti domain's 21 *native* (non-square) patches at
+    degree 2 / 2 refinements (Nmax=144, Smax=24) -- see the version of
+    ieti_dataset_generation_example.cpp predating its --SquareDiscretization
+    option. The current --SquareDiscretization=global default produces
+    larger, uniform patches (e.g. Nmax~300 at -r 2 -p 2) that exceed that
+    old model's capacity; regenerate the training data with the new default
+    and retrain before expecting this model to run without a
+    padding-capacity GISMO_ENSURE failure. Pass --SquareDiscretization off
+    to reproduce the original (native-mesh) training discretization the
+    bundled model actually supports.
+
     Model contract (the user supplies a compatible ONNX model):
 
-        input  'input' : float[1, N]      <-- residual on local DOFs
-        input  'obj.1' : float[1, N, 4]   <-- geometry features per DOF
-                                                rows are (x, y, z, w)
-                                                x,y,z : physical coords
-                                                w     : NURBS weight (=1 for B-splines)
-        output 'output': float[1, N]      <-- preconditioned vector
-
-    Here N = mb[k].size() (number of local basis functions per patch).
-    Because the scaled Dirichlet preconditioner expects a skeleton->skeleton
-    operator, this file wraps the full-DOF NN inside gsNeuralSchurOp: zero-
-    extend the skeleton input to the full local DOF vector, run the NN,
-    restrict the result back to the skeleton.
+        input  'input' : float[1, Smax]     <-- residual on skeleton DOFs,
+                                                  zero-padded from the
+                                                  patch's actual S <= Smax
+        input  'obj.1' : float[1, Nmax, 4]  <-- geometry features per free
+                                                  local DOF (x, y, z, w),
+                                                  zero-padded from N <= Nmax
+                                                  x,y,z : physical coords
+                                                  w     : NURBS weight (=1
+                                                          for B-splines)
+        output 'output': float[1, Smax]     <-- preconditioned vector,
+                                                  truncated back to S
 
     Build: requires ONNX Runtime; configure with
         cmake -DONNXRUNTIME_ROOT=/path/to/onnxruntime ..
@@ -34,89 +61,93 @@
 #include <set>
 #include <gismo.h>
 #include "gsNeuralPrec.h"
+#include "gsBenchDiscretization.h"
 
 namespace gismo {
 
-/// @brief Wraps a full-local-DOF neural operator as a skeleton->skeleton
-/// Schur complement op suitable for gsScaledDirichletPrec::addSubdomain.
-///
-/// apply(v_skeleton):
-///   1) zero-extend v_skeleton to a full local DOF vector
-///   2) run the NN (forward Schur action)
-///   3) restrict the result to the skeleton entries
-template <class T>
-class gsNeuralSchurOp : public gsLinearOperator<T>
-{
-public:
-    typedef memory::shared_ptr<gsNeuralSchurOp> Ptr;
-
-    gsNeuralSchurOp(typename gsNeuralPrec<T>::Ptr nn,
-                    std::vector<index_t> skeletonDofs,
-                    index_t nLocalDofs)
-    : m_nn(nn),
-      m_skeleton(std::move(skeletonDofs)),
-      m_nLocal(nLocalDofs)
-    {
-        GISMO_ENSURE(m_nn->rows() == m_nLocal,
-            "gsNeuralSchurOp: NN expects input size " << m_nn->rows()
-            << " but patch has " << m_nLocal << " local DOFs. "
-            "Provide a model whose input dimension matches mb[k].size().");
-    }
-
-    void apply(const gsMatrix<T> & input, gsMatrix<T> & x) const override
-    {
-        const index_t nSkel = static_cast<index_t>(m_skeleton.size());
-        GISMO_ASSERT(input.rows() == nSkel,
-            "gsNeuralSchurOp::apply: expected " << nSkel
-            << " skeleton entries, got " << input.rows());
-
-        gsMatrix<T> fullIn = gsMatrix<T>::Zero(m_nLocal, 1);
-        for (index_t i = 0; i < nSkel; ++i)
-            fullIn(m_skeleton[i], 0) = input(i, 0);
-
-        gsMatrix<T> fullOut;
-        m_nn->apply(fullIn, fullOut);
-
-        x.resize(nSkel, 1);
-        for (index_t i = 0; i < nSkel; ++i)
-            x(i, 0) = fullOut(m_skeleton[i], 0);
-    }
-
-    index_t rows() const override { return static_cast<index_t>(m_skeleton.size()); }
-    index_t cols() const override { return static_cast<index_t>(m_skeleton.size()); }
-
-private:
-    typename gsNeuralPrec<T>::Ptr m_nn;
-    std::vector<index_t>          m_skeleton;
-    index_t                       m_nLocal;
-};
-
-/// @brief Build the (4 x n_dofs) per-DOF geometry feature matrix for patch k.
+/// @brief Build the (4 x n_free) per-free-DOF geometry feature matrix for
+/// patch k, where n_free is the number of DOFs left after Dirichlet
+/// elimination (matches ieti_dataset_generation_example.cpp's "zeta").
 ///
 /// Rows are (x, y, z, w):
 ///   x,y,z : physical coordinates of the basis function's Greville abscissa
 ///           (z = 0 in 2D);
 ///   w     : NURBS weight, = 1 for B-spline geometries.
 ///
-/// The (4 x n_dofs) column-major layout matches an ONNX [1, n_dofs, 4]
+/// Columns are ordered by free-dof index (0 .. n_free-1), NOT by raw local
+/// basis index -- Dirichlet-eliminated basis functions are skipped
+/// entirely, exactly as in the training data.
+///
+/// The (4 x n_free) column-major layout matches an ONNX [1, n_free, 4]
 /// row-major tensor (per-DOF feature vectors contiguous in memory), which
 /// is what gsNeuralPrec::setAuxiliaryInput expects.
 template <class T>
 gsMatrix<T> computePatchGeometryFeatures(const gsMultiPatch<T> & mp,
                                          const gsMultiBasis<T> & mb,
+                                         const gsDofMapper & dofMapperLocal,
                                          index_t k)
 {
-    gsMatrix<T> anchors = mb[k].anchors();         // (paramDim, n_dofs)
+    gsMatrix<T> anchors = mb[k].anchors();         // (paramDim, n_basis)
     gsMatrix<T> phys;
-    mp.patch(k).eval_into(anchors, phys);          // (geoDim, n_dofs)
+    mp.patch(k).eval_into(anchors, phys);          // (geoDim, n_basis)
 
-    const index_t n_dofs = mb[k].size();
-    gsMatrix<T> features(4, n_dofs);
-    features.setZero();
-    features.topRows(phys.rows()) = phys;          // x, y, (z)
-    features.row(3).setOnes();                     // w = 1 (B-spline)
+    gsMatrix<T> features = gsMatrix<T>::Zero(4, dofMapperLocal.freeSize());
+    for (index_t j = 0; j < mb[k].size(); ++j)
+    {
+        if (!dofMapperLocal.is_free(j, 0))
+            continue;
+        const index_t i = dofMapperLocal.index(j, 0);
+        features(0, i) = phys(0, j);
+        features(1, i) = (phys.rows() > 1) ? phys(1, j) : T(0);
+        features(2, i) = (phys.rows() > 2) ? phys(2, j) : T(0);
+        features(3, i) = T(1);                     // w = 1 (B-spline)
+    }
     return features;
 }
+
+/// @brief Zero-pads a patch's actual skeleton-sized residual up to the
+/// model's fixed max skeleton size, calls the NN, and truncates the result
+/// back down -- because the bundled model was trained on patches of
+/// varying skeleton size, all zero-padded to a shared maximum (see
+/// ieti_dataset_generation_example.cpp).
+template <class T>
+class gsNeuralSchurOp : public gsLinearOperator<T>
+{
+public:
+    typedef memory::shared_ptr<gsNeuralSchurOp> Ptr;
+
+    gsNeuralSchurOp(typename gsNeuralPrec<T>::Ptr nn, index_t nSkeleton)
+    : m_nn(nn), m_nSkeleton(nSkeleton)
+    {
+        GISMO_ENSURE(m_nSkeleton <= m_nn->rows(),
+            "gsNeuralSchurOp: patch skeleton size " << m_nSkeleton
+            << " exceeds the model's maximum of " << m_nn->rows()
+            << ". Use a coarser discretization or a model trained with a "
+            "larger maximum skeleton size.");
+    }
+
+    void apply(const gsMatrix<T> & input, gsMatrix<T> & x) const override
+    {
+        GISMO_ASSERT(input.rows() == m_nSkeleton,
+            "gsNeuralSchurOp::apply: expected " << m_nSkeleton
+            << " skeleton entries, got " << input.rows());
+
+        gsMatrix<T> padded = gsMatrix<T>::Zero(m_nn->rows(), 1);
+        padded.topRows(m_nSkeleton) = input;
+
+        gsMatrix<T> out;
+        m_nn->apply(padded, out);
+
+        x = out.topRows(m_nSkeleton);
+    }
+
+    index_t rows() const override { return m_nSkeleton; }
+    index_t cols() const override { return m_nSkeleton; }
+
+private:
+    typename gsNeuralPrec<T>::Ptr m_nn;
+    index_t                       m_nSkeleton;
+};
 
 } // namespace gismo
 
@@ -128,10 +159,11 @@ int main(int argc, char *argv[])
 
     std::string geometry("domain2d/yeti_mp2.xml");
     std::string coeff("1.0");
-    index_t splitPatches = 1;
+    index_t splitPatches = 0;
     real_t stretchGeometry = 1;
-    index_t refinements = 1;
+    index_t refinements = 2;
     index_t degree = 2;
+    std::string squareDiscr("global");
     std::string boundaryConditions("d");
     std::string primals("c");
     bool eliminateCorners = false;
@@ -144,7 +176,7 @@ int main(int argc, char *argv[])
     // NN-specific options
     std::string modelPath =
         GISMO_DATA_DIR "onnx_models/"
-        "best_model_Transformer_homogeneous_neumann_l_0_deg_2_crazygeom_h40_H3_realSPD.onnx";
+        "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx";
     std::string nnInputName  = "input";
     std::string nnOutputName = "output";
     std::string nnAuxName    = "obj.1";
@@ -157,6 +189,7 @@ int main(int argc, char *argv[])
     cmd.addReal  ("",  "StretchGeometry",       "Stretch geometry in x-direction by the given factor", stretchGeometry);
     cmd.addInt   ("r", "Refinements",           "Number of uniform h-refinement steps to perform before solving", refinements);
     cmd.addInt   ("p", "Degree",                "Degree of the B-spline discretization space", degree);
+    cmd.addString("",  "SquareDiscretization",  "Element equalisation: off (native, patches differ) | global (all patches identical)", squareDiscr);
     cmd.addString("b", "BoundaryConditions",    "Boundary conditions", boundaryConditions);
     cmd.addString("c", "Primals",               "Primal constraints (c=corners, e=edges, f=faces)", primals);
     cmd.addSwitch("e", "EliminateCorners",      "Eliminate corners (if they are primals)", eliminateCorners);
@@ -194,6 +227,17 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     gsMultiPatch<>& mp = *mpPtr;
+
+    // Ensure a usable topology BEFORE splitting (see solver_benchmark_example.cpp
+    // for the rationale): CAD formats like IGES/STEP arrive with no registered
+    // interfaces, so recover the topology by geometric matching first, or a
+    // subsequent uniformSplit()/IETI setup would silently treat every patch side
+    // as an unglued boundary.
+    if (mp.nInterfaces() == 0)
+    {
+        gsInfo << "(no interfaces registered, computing topology) " << std::flush;
+        mp.computeTopology();
+    }
 
     for (index_t i=0; i<splitPatches; ++i)
     {
@@ -256,50 +300,14 @@ int main(int argc, char *argv[])
 
     /************ Setup bases and adjust degree *************/
 
-    gsMultiBasis<> mb(mp);
-
     gsInfo << "Setup bases and adjust degree... " << std::flush;
 
-    for ( size_t i = 0; i < mb.nBases(); ++ i )
-        mb[i].setDegreePreservingMultiplicity(degree);
-
-    for ( index_t i = 0; i < refinements; ++i )
-        mb.uniformRefine();
-
-    // Enforce square discretization across all patches (see ieti_example.cpp
-    // for rationale). This guarantees mb[k].size() is the same for every k,
-    // so a single ONNX model with one fixed input dimension can be used.
-    {
-        const short_t dim = mp.domainDim();
-        index_t globalMax = 0;
-        for (size_t k = 0; k < mb.nBases(); ++k)
-        {
-            const index_t total = mb[k].numElements();
-            for (short_t d = 0; d < dim; ++d)
-            {
-                const index_t side_elements = mb[k].numElements(boxSide(d, 0));
-                const index_t n_dir = total / side_elements;
-                globalMax = std::max(globalMax, n_dir);
-            }
-        }
-
-        for (size_t k = 0; k < mb.nBases(); ++k)
-        {
-            for (short_t d = 0; d < dim; ++d)
-            {
-                while (true)
-                {
-                    const index_t total = mb[k].numElements();
-                    const index_t side_elements = mb[k].numElements(boxSide(d, 0));
-                    const index_t n_dir = total / side_elements;
-                    if (n_dir < globalMax)
-                        mb[k].uniformRefine(1, 1, d);
-                    else
-                        break;
-                }
-            }
-        }
-    }
+    // --SquareDiscretization global (default, matches solver_benchmark_example.cpp
+    // and ieti_dataset_generation_example.cpp) makes every patch's raw basis
+    // identical. makeInterfacesConforming then unions interface knots so the
+    // dof-mapper/IETI matchWith still succeeds if patches were non-conforming.
+    gsMultiBasis<> mb = makeBenchBasis(mp, degree, refinements, squareDiscr);
+    makeInterfacesConforming(mp, mb);
 
     gsInfo << "done.\n";
 
@@ -376,6 +384,27 @@ int main(int argc, char *argv[])
         gsNeuralModel<real_t>::Ptr(new gsNeuralModel<real_t>(modelPath, useCuda));
     gsInfo << "done (" << modelTimer.stop() << " s).\n";
 
+    // The model's fixed max shapes (see file header): patches with fewer
+    // skeleton/free dofs than these are zero-padded up to them.
+    auto modelInputElems = [&nnModel](const std::string & name) -> index_t
+    {
+        const auto & names  = nnModel->inputNames();
+        const auto & shapes = nnModel->inputShapes();
+        for (size_t i = 0; i < names.size(); ++i)
+            if (names[i] == name)
+            {
+                int64_t numel = 1;
+                for (auto d : shapes[i]) numel *= d;
+                return static_cast<index_t>(numel);
+            }
+        GISMO_ERROR("ieti_nn_example: model input '" << name << "' not found.");
+    };
+    const index_t maxSkeleton = modelInputElems(nnInputName);
+    const index_t maxLocal    = modelInputElems(nnAuxName) / 4;
+    gsInfo << "NN model max shapes: skeleton dofs <= " << maxSkeleton
+           << ", free local dofs <= " << maxLocal
+           << " (patches are zero-padded up to these).\n";
+
     gsStopwatch nnTimer;
 
     for (index_t k=0; k<nPatches; ++k)
@@ -414,18 +443,30 @@ int main(int argc, char *argv[])
         // --- Neural Schur complement for this patch ---------------------
         // Cheap: only allocates the per-patch I/O float buffers and the
         // Ort::Value views over them. The ORT session and model weights
-        // are shared via nnModel.
+        // are shared via nnModel. The patch's actual geometry/skeleton
+        // vectors are zero-padded up to the model's fixed max shapes by
+        // gsNeuralSchurOp (see its doc comment and the file header).
         gsNeuralPrec<real_t>::Ptr nn = std::make_shared<gsNeuralPrec<real_t>>(
             nnModel, nnInputName, nnOutputName
         );
 
-        gsMatrix<real_t> features = computePatchGeometryFeatures(mp, mb, k);
-        nn->setAuxiliaryInput(nnAuxName, features);
+        const gsDofMapper & dofMapperLocal = ietiMapper.dofMapperLocal(k);
+        gsMatrix<real_t> features = computePatchGeometryFeatures(mp, mb, dofMapperLocal, k);
 
         std::vector<index_t> skeletonDofs = ietiMapper.skeletonDofs(k);
 
+        GISMO_ENSURE(features.cols() <= maxLocal,
+            "ieti_nn_example: patch " << k << " has " << features.cols()
+            << " free local dofs, exceeding the model's maximum of "
+            << maxLocal << ". Use a coarser discretization or a model "
+            "trained with a larger maximum.");
+
+        gsMatrix<real_t> featuresPadded = gsMatrix<real_t>::Zero(4, maxLocal);
+        featuresPadded.leftCols(features.cols()) = features;
+        nn->setAuxiliaryInput(nnAuxName, featuresPadded);
+
         gsLinearOperator<>::Ptr nnSchurOp = std::make_shared<gsNeuralSchurOp<real_t>>(
-            nn, skeletonDofs, mb[k].size()
+            nn, static_cast<index_t>(skeletonDofs.size())
         );
 
         prec.addSubdomain(
@@ -445,6 +486,12 @@ int main(int argc, char *argv[])
         std::set<index_t> seen;
         for (size_t i = 0; i < pDofIndices.size(); ++i)
         {
+            // Skip constraints whose vector is zero: the corner DOF is entirely
+            // on the Dirichlet boundary for this patch, so it has been eliminated
+            // from the local free-DOF basis. Adding a zero row/column to the
+            // saddle-point system would make it singular and crash the SparseLU
+            // solve (see solver_benchmark_example.cpp's IETI-DP block).
+            if (pConstraints[i].nonZeros() == 0) continue;
             if (seen.find(pDofIndices[i]) == seen.end())
             {
                 uniqueConstraints.push_back(pConstraints[i]);
