@@ -168,6 +168,7 @@ int main(int argc, char *argv[])
     real_t tolerance = 1.e-8;
     index_t maxIterations = 100;
     bool calcEigenvalues = false;
+    index_t numRun = 1;
     std::string out;
     bool plot = false;
 
@@ -194,6 +195,7 @@ int main(int argc, char *argv[])
     cmd.addReal  ("t", "Solver.Tolerance",      "Stopping criterion for linear solver", tolerance);
     cmd.addInt   ("",  "Solver.MaxIterations",  "Maximum iterations for linear solver", maxIterations);
     cmd.addSwitch("",  "Solver.CalcEigenvalues","Estimate eigenvalues based on Lanczos", calcEigenvalues);
+    cmd.addInt   ("",  "num_run",               "Number of times the solve is repeated; the reported solve time is the mean over the repeats (setup is measured once)", numRun);
     cmd.addString("m", "model",                 "Path to the ONNX model file", modelPath);
     cmd.addString("",  "nnInput",               "ONNX primary input tensor name", nnInputName);
     cmd.addString("",  "nnOutput",              "ONNX output tensor name", nnOutputName);
@@ -204,6 +206,7 @@ int main(int argc, char *argv[])
 
     try { cmd.getValues(argc,argv); } catch (int rv) { return rv; }
 
+    if (numRun < 1) numRun = 1;
 
     if ( ! gsFileManager::fileExists(geometry) )
     {
@@ -542,17 +545,32 @@ int main(int argc, char *argv[])
     gsMatrix<> rhsForSchur = ieti.rhsForSchurComplement();
 
     gsInfo << "done.\n    Setup cg solver for Lagrange multipliers and solve... " << std::flush;
-    gsMatrix<> lambda;
-    lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
 
-    gsMatrix<> errorHistory;
+    gsMatrix<> lambda, errorHistory;
+    real_t conditionNumber = 0;
 
-    gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
-    gsStopwatch timer;
-    PCG.setOptions( cmd.getGroup("Solver") ).solveDetailed( rhsForSchur, lambda, errorHistory );
-    const double solveTime = timer.stop();
+    // Mean solve time over numRun repeats (as in solver_benchmark_example.cpp):
+    // the Lagrange multiplier is reset to the same seeded vector each repeat,
+    // so the PCG on the Schur complement is deterministic and only the timing
+    // varies.
+    double solveTime = 0;
+    for (index_t run = 0; run < numRun; ++run)
+    {
+        std::srand(1);
+        lambda.setRandom( ieti.nLagrangeMultipliers(), 1 );
 
-    gsInfo << "done. Solve time: " << solveTime << " s\n"
+        gsStopwatch timer;
+        gsConjugateGradient<> PCG( ieti.schurComplement(), prec.preconditioner() );
+        PCG.setOptions( cmd.getGroup("Solver") ).solveDetailed( rhsForSchur, lambda, errorHistory );
+        solveTime += timer.stop();
+
+        if (calcEigenvalues && run == numRun-1)
+            conditionNumber = PCG.getConditionNumber();
+    }
+    solveTime /= numRun;
+
+    gsInfo << "done. Solve time: " << solveTime << " s"
+           << (numRun > 1 ? " (mean over " + std::to_string(numRun) + " repeats)" : "") << "\n"
            << "    Reconstruct solution from Lagrange multipliers... " << std::flush;
     std::vector<gsMatrix<>> uLocal = primal.distributePrimalSolution(
         ieti.constructSolutionFromLagrangeMultipliers(lambda)
@@ -575,7 +593,7 @@ int main(int argc, char *argv[])
         gsInfo << errorHistory.topRows(5).transpose() << " ... " << errorHistory.bottomRows(5).transpose()  << "\n\n";
 
     if (calcEigenvalues)
-        gsInfo << "Estimated condition number: " << PCG.getConditionNumber() << "\n";
+        gsInfo << "Estimated condition number: " << conditionNumber << "\n";
 
     if (!out.empty())
     {
