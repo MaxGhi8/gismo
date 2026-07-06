@@ -7,13 +7,29 @@
         filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
     has the following I/O:
 
-        input  'input' : float[1, 48]       <-- residual on skeleton DOFs
-        input  'obj.1' : float[1, 304, 4]   <-- geometry features per local DOF
-        output 'output': float[1, 48]       <-- preconditioned vector on skeleton DOFs
+        input  'input'    : float[1, 48]       <-- residual on skeleton DOFs (f)
+        input  'obj.1'    : float[1, 304, 4]   <-- geometry features per local DOF
+        output 'u'        : float[1, 48]       <-- preconditioned vector on skeleton DOFs
+        output 'Q'        : float[1, 48, 20]   <-- attention weights
+        output 'K_scaled' : float[1, 48, 20]   <-- scaled keys
+        output 'epsilon'  : float[]             <-- scalar residual-skip coefficient
 
-    This example creates two dummy tensors with those shapes, hands them
-    to gsNeuralPrec, runs apply() a few times, and prints a small slice
-    of the output so you can verify the wiring end-to-end.
+    gsNeuralPrec only ever asks for the 'u' output -- that's the model's
+    actual preconditioning result and the only thing apply() needs. The
+    other three outputs are exposed by the graph so the identity
+
+        Kt_f = K_scaled^T @ f
+        Qf   = Q @ Kt_f
+        u    = Qf + epsilon * f
+
+    can be checked directly against saved reference CSVs, without a
+    second ONNX Run.
+
+    This example creates two dummy tensors with the 'input'/'obj.1' shapes,
+    hands them to gsNeuralPrec, runs apply() a few times, and prints a small
+    slice of the output so you can verify the wiring end-to-end. It then
+    reruns on saved reference inputs and checks both gsNeuralPrec's own
+    output and the u = Qf + epsilon*f formula against saved reference CSVs.
 
     Build: requires ONNX Runtime; configure with
         cmake -DONNXRUNTIME_ROOT=/path/to/onnxruntime ..
@@ -66,11 +82,13 @@ int main(int argc, char * argv[])
     gsInfo << "CUDA  : " << (use_cuda ? "yes" : "no") << "\n";
 
     // The model expects:
-    //   primary input  "input"  : 48 values    (residual on skeleton DOFs)
+    //   primary input  "input"  : 48 values    (residual on skeleton DOFs, f)
     //   aux     input  "obj.1"  : 304 * 4 = 1216 values (geometry features per local DOF)
-    //   output         "output" : 48 values    (skeleton DOFs)
+    //   output         "u"      : 48 values    (skeleton DOFs)
+    // (the model also exposes "Q", "K_scaled", "epsilon" -- see the formula
+    // check below; gsNeuralPrec itself only ever reads "u")
     gsNeuralPrec<real_t> nnPrec(
-        model_path, "input", "output", use_cuda
+        model_path, "input", "u", use_cuda
     );
 
     gsInfo << "Loaded. rows=" << nnPrec.rows()
@@ -121,13 +139,19 @@ int main(int argc, char * argv[])
     const std::string csv_dir = GISMO_DATA_DIR "onnx_models/";
     const std::string prefix  = "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer_";
 
-    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 48x1
+    gsMatrix<real_t> ref_input0  = loadCsvRow(csv_dir + prefix + "input_0.csv");  // 48x1  (f)
     gsMatrix<real_t> ref_input1  = loadCsvRow(csv_dir + prefix + "input_1.csv");  // 1216x1
-    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "output.csv");   // 48x1
+    gsMatrix<real_t> ref_output  = loadCsvRow(csv_dir + prefix + "u.csv");        // 48x1  (u)
+    gsMatrix<real_t> ref_Q       = loadCsvRow(csv_dir + prefix + "Q.csv");        // 960x1
+    gsMatrix<real_t> ref_K       = loadCsvRow(csv_dir + prefix + "K_scaled.csv"); // 960x1
+    gsMatrix<real_t> ref_epsilon = loadCsvRow(csv_dir + prefix + "epsilon.csv");  // 1x1
 
     gsInfo << "Loaded CSV: input_0=" << ref_input0.size()
            << "  input_1=" << ref_input1.size()
-           << "  output=" << ref_output.size() << "\n";
+           << "  u=" << ref_output.size()
+           << "  Q=" << ref_Q.size()
+           << "  K_scaled=" << ref_K.size()
+           << "  epsilon=" << ref_epsilon.size() << "\n";
 
     // obj.1 is stored flat as [1,304,4] row-major → 1216 values.
     // setAuxiliaryInput expects a (4 x 304) column-major matrix (same memory layout).
@@ -152,6 +176,42 @@ int main(int argc, char * argv[])
         gsInfo << "PASSED (tolerance " << abs_tol << ")\n";
     else
         gsInfo << "FAILED: max error " << max_err << " exceeds tolerance " << abs_tol << "\n";
+
+    // -------------------------------------------------------------------------
+    // Formula check: u = Q @ (K_scaled^T @ f) + epsilon * f, using the Q /
+    // K_scaled / epsilon outputs the model now also exposes (loaded above
+    // from CSV, since those CSVs already came from a real forward pass).
+    // -------------------------------------------------------------------------
+    gsInfo << "\n--- Formula check: u = Q @ (K_scaled^T @ f) + epsilon * f ---\n";
+
+    const index_t n_heads = 20;
+
+    // Q and K_scaled are [1, 48, 20] row-major in ONNX (48 rows of 20
+    // contiguous values each). Reshaping the flat buffer into a (20 x 48)
+    // column-major gsMatrix puts each ONNX row into one column, which is
+    // exactly the transpose -- same reshape trick as 'obj.1' above, so the
+    // reshaped buffers already ARE K_scaled^T / Q^T.
+    gsMatrix<real_t> K_scaled_T = ref_K;
+    K_scaled_T.resize(n_heads, n_skeleton);   // reshape in-place: (20 x 48) == K_scaled^T
+
+    gsMatrix<real_t> Q_T = ref_Q;
+    Q_T.resize(n_heads, n_skeleton);          // reshape in-place: (20 x 48) == Q^T
+
+    gsMatrix<real_t> Kt_f     = K_scaled_T * ref_input0;                   // (20x48)*(48x1) = 20x1
+    gsMatrix<real_t> Qf       = Q_T.transpose() * Kt_f;                    // (48x20)*(20x1) = 48x1
+    gsMatrix<real_t> u_manual = Qf + ref_epsilon(0, 0) * ref_input0;       // 48x1
+
+    gsMatrix<real_t> formula_diff = (u_manual - ref_output).cwiseAbs();
+    const real_t formula_max_err  = formula_diff.maxCoeff();
+    const real_t formula_mean_err = formula_diff.mean();
+
+    gsInfo << "Max  |u_manual - u_reference| = " << formula_max_err  << "\n";
+    gsInfo << "Mean |u_manual - u_reference| = " << formula_mean_err << "\n";
+
+    if (formula_max_err < abs_tol)
+        gsInfo << "PASSED (tolerance " << abs_tol << ")\n";
+    else
+        gsInfo << "FAILED: max error " << formula_max_err << " exceeds tolerance " << abs_tol << "\n";
 
     return 0;
 }

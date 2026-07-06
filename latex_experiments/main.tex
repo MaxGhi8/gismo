@@ -1185,6 +1185,115 @@ same geometry-induced degradation that breaks the multigrid smoother, though it
 remains far milder than that of the global Krylov solvers.
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\clearpage
+\section{Neural Schur preconditioner: numerical comparison}
+\label{sec:nn-comparison}
+
+We now validate the neural Schur preconditioner $\Pneural$
+(Section~\ref{sec:neural-prec}) against the exact scaled Dirichlet
+preconditioner $\Psd$ and the unpreconditioned baseline, using the same
+IETI-DP solver (Algorithm~\ref{alg:ieti-dp}), the same yeti domain, the same
+discretization, boundary conditions, right-hand side, and stopping criterion
+(tolerance $10^{-8}$, maximum $1\,000$ iterations) for all three --- only the
+preconditioner applied inside the CG iteration on the interface
+problem~\eqref{eq:ieti-schur} changes.
+We use $p=2$, $r=2$ ($n_k=324$ basis functions per patch, $N=5\,760$ coupled
+dofs, $\Lambda=384$ Lagrange multipliers), the discretization the bundled
+model \texttt{YetiSchurTransformer} (Section~\ref{subsec:training}) was
+trained on, so that every patch's free-dof and skeleton-dof counts fall
+within the model's declared maxima ($n_k\le 304$, $|\skel_k|\le 48$) with no
+out-of-distribution padding.
+At this configuration no interior corner qualifies as a primal dof
+($n_\Pi=0$): every shared corner of the yeti domain also touches the
+Dirichlet boundary, so the primal/coarse component of IETI-DP is empty and
+the comparison isolates the effect of the local interface preconditioner
+alone.
+
+Table~\ref{tab:nn-comparison} reports setup and solve times and iteration
+counts. The standard and unpreconditioned variants are measured with
+\texttt{solver\_benchmark\_example} (setup measured once, solve time the
+mean over 5 repeated solves within one process); the neural variant is
+measured with \texttt{ieti\_nn\_example} over 5 independent process runs
+(mean $\pm$ population standard deviation), since each run reloads the ONNX
+Runtime session and model weights.
+
+\begin{table}
+    \centering
+    \caption{Neural Schur preconditioner vs.\ the analytic scaled Dirichlet
+    preconditioner and the unpreconditioned baseline, IETI-DP CG on the
+    interface problem~\eqref{eq:ieti-schur} (yeti domain, $\npatch=21$,
+    $p=2$, $r=2$, $N=5\,760$, $\Lambda=384$, $n_\Pi=0$). Tolerance
+    $10^{-8}$, maximum $1\,000$ iterations; all three methods converged.
+    ``setup'' includes local patch assembly and, for the neural
+    preconditioner, the one-time ONNX session/model load; ``solve'' is the
+    CG loop on the Lagrange multipliers.}
+    \label{tab:nn-comparison}
+    \begin{tabular}{lcccc}
+        \toprule
+        Method & setup [s] & solve [s] & iters & converged \\
+        \midrule
+        IETI-DP (scaled Dirichlet, $\Psd$) & 0.132 & 0.0022 & 14 & yes \\
+        IETI-DP (no preconditioner)        & 0.132 & 0.0032 & 32 & yes \\
+        IETI-DP (neural, $\Pneural$)       & $0.062 \pm 0.002$ & $0.0031 \pm 0.0006$ & 27 & yes \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\emph{Iteration count.} $\Pneural$ converges in $27$ iterations, between the
+unpreconditioned $32$ and the exact $\Psd$'s $14$: the learned operator
+recovers a genuine, if imperfect, approximation to the local Schur
+complement's action, cutting the iteration count relative to no
+preconditioning by $16\%$ ($27$ vs.\ $32$) without matching the near-exact
+spectral equivalence of $\Psd$ (Section~\ref{subsec:theory}). All 5 neural
+runs reach the same iteration count (deterministic given the same seeded
+initial Lagrange multiplier), confirming the ONNX inference path is
+reproducible.
+
+\emph{Solve time.} With $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta$
+(Eq.~\eqref{eq:spd-param}) evaluated once per patch during setup and cached,
+every application of $\Pneural$ reduces to the two $O(|\skel_k|\dv)$
+matrix--vector products the formulation already implies
+(Section~\ref{subsec:architecture}), rather than a full Transformer forward
+pass per CG step. Consequently $\Pneural$'s solve time is only $1.4\times$
+that of $\Psd$'s ($0.0031\,$s vs.\ $0.0022\,$s), and is, within measurement
+noise, on par with the unpreconditioned baseline's ($0.0031\,$s vs.\
+$0.0032\,$s) despite converging in $27$ vs.\ $32$ iterations. Per CG step
+this is $\approx 0.11\,$ms for $\Pneural$, between $\Psd$'s $0.16\,$ms (one
+triangular back-solve against the precomputed factorization of $\Aaug{k}$,
+Remark~\ref{rmk:schur-cost}) and the unpreconditioned $0.10\,$ms (a single
+matrix--vector product) --- the learned operator's two small
+$O(|\skel_k|\dv)$ products are now \emph{cheaper} per application than an
+exact triangular solve of the $n_k$-dimensional local system.
+
+\emph{Setup time.} $\Pneural$'s setup remains cheaper than $\Psd$'s
+($0.062\,$s vs.\ $0.132\,$s, less than half), since it needs no per-patch
+factorization of $\Aaug{k}$: the one-time $O(K p\,n_k^{3/2})$ factorization
+cost (Remark~\ref{rmk:schur-cost}) is replaced by a fixed-cost model load
+plus, per patch, one forward pass that computes and caches
+$Q_\theta(\vect{\zeta}_k)$, $\varepsilon_\theta$ and cross-checks them
+against the network's own output. Summing setup and solve, $\Pneural$'s
+total wall time ($0.065\,$s) is now $\approx 2.1\times$ \emph{faster} than
+both $\Psd$ ($0.134\,$s) and the unpreconditioned variant ($0.135\,$s):
+caching turns the neural preconditioner from the slowest option overall into
+the fastest, without changing the underlying operator or its $27$-iteration
+convergence.
+
+\emph{Takeaway.} Caching $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta$
+per patch --- exploiting that both depend only on the geometry descriptor
+$\vect{\zeta}_k$ and not on the probe vector $\vect{v}$
+(Eq.~\eqref{eq:matrix-form}) --- eliminates the repeated Transformer forward
+pass that dominated an earlier, uncached implementation, reducing every
+application of $\Pneural$ to the two $O(|\skel_k|\dv)$ matrix--vector
+products the formulation already implies. At this discretization the result
+is a preconditioner that is not merely competitive but \emph{strictly
+faster} in total wall time than both the exact scaled Dirichlet
+preconditioner and no preconditioning at all, while converging in fewer
+iterations than the unpreconditioned baseline. The remaining gap to $\Psd$
+is entirely in iteration count ($27$ vs.\ $14$), i.e.\ in how well
+$M_\theta(\vect{\zeta}_k)$ approximates the true local Schur complement
+spectrally (Section~\ref{subsec:theory}), not in the cost of applying it.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Bibliography (Harvard notation)

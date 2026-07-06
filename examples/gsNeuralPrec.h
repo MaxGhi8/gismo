@@ -99,40 +99,48 @@ public:
             m_inputShapes[i] = shape;
         }
 
-        GISMO_ENSURE(m_session->GetOutputCount() == 1,
-            "gsNeuralModel: model must have exactly one output, has " << m_session->GetOutputCount());
+        const size_t n_outputs = m_session->GetOutputCount();
+        m_outputNameStrs.reserve(n_outputs);
+        m_outputShapes.resize(n_outputs);
 
-        auto out_name_ptr = m_session->GetOutputNameAllocated(0, allocator);
-        m_outputNameStr   = out_name_ptr.get();
+        for (size_t i = 0; i < n_outputs; ++i)
+        {
+            auto name_ptr = m_session->GetOutputNameAllocated(i, allocator);
+            m_outputNameStrs.emplace_back(name_ptr.get());
 
-        auto typeinfo_out = m_session->GetOutputTypeInfo(0);  // keep alive
-        auto otinfo = typeinfo_out.GetTensorTypeAndShapeInfo();
-        m_outputShape = otinfo.GetShape();
-        for (auto & d : m_outputShape) if (d < 0) d = 1;
+            auto typeinfo_o = m_session->GetOutputTypeInfo(i);  // keep alive
+            auto otinfo = typeinfo_o.GetTensorTypeAndShapeInfo();
+            std::vector<int64_t> shape = otinfo.GetShape();
+            for (auto & d : shape) if (d < 0) d = 1;
+            m_outputShapes[i] = shape;
+        }
     }
 
     /// @brief Underlying ORT session. Mutable: Run() is non-const but the
     /// model state it reads from is logically const after construction.
     Ort::Session & session() const { return *m_session; }
 
-    size_t numInputs() const { return m_inputNameStrs.size(); }
-    const std::vector<std::string>          & inputNames()  const { return m_inputNameStrs; }
-    const std::vector<std::vector<int64_t>> & inputShapes() const { return m_inputShapes; }
-    const std::string                       & outputName()  const { return m_outputNameStr; }
-    const std::vector<int64_t>              & outputShape() const { return m_outputShape; }
+    size_t numInputs()  const { return m_inputNameStrs.size(); }
+    size_t numOutputs() const { return m_outputNameStrs.size(); }
+    const std::vector<std::string>          & inputNames()   const { return m_inputNameStrs; }
+    const std::vector<std::vector<int64_t>> & inputShapes()  const { return m_inputShapes; }
+    const std::vector<std::string>          & outputNames()  const { return m_outputNameStrs; }
+    const std::vector<std::vector<int64_t>> & outputShapes() const { return m_outputShapes; }
 
 private:
     Ort::Env                              m_env;
     mutable std::unique_ptr<Ort::Session> m_session;     // Run() is non-const
     std::vector<std::string>              m_inputNameStrs;
     std::vector<std::vector<int64_t>>     m_inputShapes;
-    std::string                           m_outputNameStr;
-    std::vector<int64_t>                  m_outputShape;
+    std::vector<std::string>              m_outputNameStrs;
+    std::vector<std::vector<int64_t>>     m_outputShapes;
 };
 
 /// @brief Neural-network preconditioner backed by a shared gsNeuralModel.
 ///
-/// The model must have N >= 1 named inputs and exactly one named output.
+/// The model must have N >= 1 named inputs and M >= 1 named outputs. One
+/// output is selected by name at construction time (the one apply() uses
+/// as its result); any other outputs the graph exposes are ignored.
 /// One input is designated as the "primary" input at construction time;
 /// it receives the residual vector on every apply() call. Every other
 /// input must be bound via setAuxiliaryInput() before the first apply().
@@ -207,12 +215,10 @@ public:
         }
         m_primaryIdx = primaryIdx;
 
-        GISMO_ENSURE(m_model->outputName() == m_outputName,
-            "gsNeuralPrec: requested output '" << m_outputName
-            << "' does not match the model's output '" << m_model->outputName() << "'");
-        m_outputNamePtr = m_model->outputName().c_str();
+        const index_t outIdx = findOutputIndex(m_outputName);
+        m_outputNamePtr = m_model->outputNames()[outIdx].c_str();
 
-        m_outputShape = m_model->outputShape();    // local mutable copy for Ort::Value
+        m_outputShape = m_model->outputShapes()[outIdx];   // local mutable copy for Ort::Value
         int64_t out_numel = 1;
         for (auto d : m_outputShape) out_numel *= d;
         m_outputBuffer.assign(static_cast<size_t>(out_numel), 0.0f);
@@ -307,6 +313,18 @@ private:
         for (size_t i = 0; i < names.size(); ++i)
             if (names[i] == name) return static_cast<index_t>(i);
         GISMO_ERROR("gsNeuralPrec: input '" << name << "' not found in model.");
+    }
+
+    index_t findOutputIndex(const std::string & name) const
+    {
+        const auto & names = m_model->outputNames();
+        for (size_t i = 0; i < names.size(); ++i)
+            if (names[i] == name) return static_cast<index_t>(i);
+        std::ostringstream oss;
+        oss << "gsNeuralPrec: requested output '" << name
+            << "' not found in model. Available outputs:";
+        for (const auto & n : names) oss << " " << n;
+        GISMO_ERROR(oss.str());
     }
 
     typename gsNeuralModel<T>::Ptr m_model;

@@ -1,12 +1,13 @@
 /** @file ieti_nn_example.cpp
 
-    @brief IETI solver with a neural-network Schur complement.
+    @brief IETI solver with a cached neural-network Schur complement.
 
     Mirrors ieti_example.cpp (CG on the Schur complement formulation), but
     replaces each patch's local Schur complement operator S_k inside the
-    scaled Dirichlet preconditioner with a learned model. One ONNX session
-    is loaded per patch and bound to that patch's geometry features, then
-    plugged into gsScaledDirichletPrec as the per-patch Schur operator.
+    scaled Dirichlet preconditioner with a learned model's cached linear
+    decomposition. One ONNX session is loaded ONCE and shared across all
+    patches; each patch runs the model exactly ONCE, during setup, to
+    extract three small per-patch tensors, then never touches ONNX again.
 
     Discretization: --SquareDiscretization (default "global") uses the same
     makeBenchBasis()/makeInterfacesConforming() helpers as
@@ -19,9 +20,8 @@
 
     Because a given ONNX export has a fixed input shape, every patch's
     actual (N, S) is zero-padded up to the model's declared max (Nmax,
-    Smax) before calling it, and the output is truncated back to S -- see
-    gsNeuralSchurOp below. Nmax/Smax are read from the model's own declared
-    input shapes.
+    Smax) before calling it -- see gsCachedNeuralSchurOp below. Nmax/Smax
+    are read from the model's own declared input shapes.
 
     NOTE: the bundled model
         filedata/onnx_models/model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx
@@ -34,19 +34,40 @@
     values well below it will still run but are out-of-distribution for
     the model.
 
-    Model contract (the user supplies a compatible ONNX model):
+    Model contract: this file requires a model exposing the specific
+    4-output decomposition below (NOT a generic single-output model):
 
-        input  'input' : float[1, Smax]     <-- residual on skeleton DOFs,
-                                                  zero-padded from the
-                                                  patch's actual S <= Smax
-        input  'obj.1' : float[1, Nmax, 4]  <-- geometry features per free
-                                                  local DOF (x, y, z, w),
-                                                  zero-padded from N <= Nmax
-                                                  x,y,z : physical coords
-                                                  w     : NURBS weight (=1
-                                                          for B-splines)
-        output 'output': float[1, Smax]     <-- preconditioned vector,
-                                                  truncated back to S
+        input  'input'    : float[1, Smax]     <-- residual on skeleton
+                                                     DOFs (f), zero-padded
+                                                     from the patch's
+                                                     actual S <= Smax
+        input  'obj.1'    : float[1, Nmax, 4]  <-- geometry features per
+                                                     free local DOF
+                                                     (x, y, z, w),
+                                                     zero-padded from
+                                                     N <= Nmax
+                                                     x,y,z : physical coords
+                                                     w     : NURBS weight
+                                                             (=1 for
+                                                             B-splines)
+        output 'u'        : float[1, Smax]     <-- preconditioned vector
+        output 'Q'        : float[1, Smax, H]  <-- attention weights
+        output 'K_scaled' : float[1, Smax, H]  <-- scaled keys
+        output 'epsilon'  : float[]             <-- scalar residual-skip
+                                                     coefficient
+
+    where u = Q @ (K_scaled^T @ f) + epsilon * f, and Q/K_scaled/epsilon
+    depend only on the geometry input ('obj.1'), NOT on f -- verified
+    empirically (see
+    docs/superpowers/specs/2026-07-06-ieti-nn-cached-schur-operator-design.md).
+    H (the head count) is read from the model's own 'Q' output shape, not
+    hardcoded.
+
+    Because of this, each patch's Q/K_scaled/epsilon are computed ONCE
+    during setup (computeCachedSchurTensors, using one random probe f
+    purely to cross-check the formula against the model's own 'u' output)
+    and cached in a gsCachedNeuralSchurOp, which does only two small dense
+    matvecs per apply() -- no ONNX Run() during the CG solve at all.
 
     Build: requires ONNX Runtime; configure with
         cmake -DONNXRUNTIME_ROOT=/path/to/onnxruntime ..
@@ -103,23 +124,126 @@ gsMatrix<T> computePatchGeometryFeatures(const gsMultiPatch<T> & mp,
     return features;
 }
 
-/// @brief Zero-pads a patch's actual skeleton-sized residual up to the
-/// model's fixed max skeleton size, calls the NN, and truncates the result
-/// back down -- because the bundled model was trained on patches of
-/// varying skeleton size, all zero-padded to a shared maximum (see
-/// ieti_dataset_generation_example.cpp).
+/// @brief The three per-patch tensors cached from one forward pass of the
+/// model, sufficient to reproduce u = Q @ (K_scaled^T @ f) + epsilon * f
+/// for any f, without ever calling the model again.
 template <class T>
-class gsNeuralSchurOp : public gsLinearOperator<T>
+struct gsCachedSchurTensors
+{
+    gsMatrix<T> Q_T;          // (n_heads x maxSkeleton), == Q^T
+    gsMatrix<T> K_scaled_T;   // (n_heads x maxSkeleton), == K_scaled^T
+    T           epsilon;
+};
+
+/// @brief Runs the model ONCE for one patch's geometry to extract and cache
+/// Q, K_scaled, epsilon (verified independent of the residual input), and
+/// cross-checks that u = Q @ (K_scaled^T @ f) + epsilon * f reproduces the
+/// model's own 'u' output for a random probe f, within `tol`. Throws
+/// (naming `patchIndex`) if the cross-check fails.
+///
+/// `featuresPadded` is the (4 x maxLocal) geometry tensor, already
+/// zero-padded (see computePatchGeometryFeatures), in the same layout
+/// gsNeuralPrec::setAuxiliaryInput used to expect. `maxSkeleton`/`nHeads`
+/// are read once in main() from the model's declared input/output shapes.
+template <class T>
+gsCachedSchurTensors<T> computeCachedSchurTensors(
+    typename gsNeuralModel<T>::Ptr model,
+    const std::string & inputName, const std::string & auxName,
+    const std::string & outputName, const std::string & qName,
+    const std::string & kName, const std::string & epsName,
+    const gsMatrix<T> & featuresPadded,
+    index_t maxSkeleton, index_t nSkeleton, index_t nHeads,
+    T tol, index_t patchIndex)
+{
+    Ort::MemoryInfo memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+
+    // Random (non-zero) probe residual: Q/K_scaled/epsilon are geometry-only
+    // (verified independent of 'input' -- see the design doc), so any
+    // nontrivial vector works here. It exists only to make the cross-check
+    // below non-vacuous; its value has no bearing on the cached tensors.
+    gsMatrix<T> fProbe(maxSkeleton, 1);
+    fProbe.setRandom();
+
+    std::vector<float> fBuf(static_cast<size_t>(maxSkeleton));
+    for (index_t i = 0; i < maxSkeleton; ++i)
+        fBuf[static_cast<size_t>(i)] = static_cast<float>(fProbe(i, 0));
+
+    std::vector<float> auxBuf(static_cast<size_t>(featuresPadded.size()));
+    for (index_t i = 0; i < featuresPadded.size(); ++i)
+        auxBuf[static_cast<size_t>(i)] = static_cast<float>(featuresPadded.data()[i]);
+
+    std::vector<int64_t> fShape   = { 1, maxSkeleton };
+    std::vector<int64_t> auxShape = { 1, featuresPadded.cols(), featuresPadded.rows() };
+
+    Ort::Value inF = Ort::Value::CreateTensor<float>(
+        memInfo, fBuf.data(), fBuf.size(), fShape.data(), fShape.size());
+    Ort::Value inAux = Ort::Value::CreateTensor<float>(
+        memInfo, auxBuf.data(), auxBuf.size(), auxShape.data(), auxShape.size());
+
+    const char * inputNamesArr[]  = { inputName.c_str(), auxName.c_str() };
+    const char * outputNamesArr[] = { outputName.c_str(), qName.c_str(), kName.c_str(), epsName.c_str() };
+    Ort::Value inputs[] = { std::move(inF), std::move(inAux) };
+
+    auto outputs = model->session().Run(
+        Ort::RunOptions{nullptr},
+        inputNamesArr, inputs, 2,
+        outputNamesArr, 4);
+
+    const float * uPtr   = outputs[0].template GetTensorData<float>();
+    const float * qPtr   = outputs[1].template GetTensorData<float>();
+    const float * kPtr   = outputs[2].template GetTensorData<float>();
+    const float   epsVal = *outputs[3].template GetTensorData<float>();
+
+    // Q and K_scaled are [1, Smax, H] row-major in ONNX (Smax rows of H
+    // contiguous values each). Filling a (H x Smax) column-major gsMatrix
+    // directly from that flat buffer lands each ONNX row in one column,
+    // which is exactly the transpose -- same reshape trick as
+    // neuralPrec_nn_example.cpp, so these ARE Q^T / K_scaled^T already.
+    gsMatrix<T> Q_T(nHeads, maxSkeleton), K_scaled_T(nHeads, maxSkeleton);
+    for (index_t i = 0; i < nHeads * maxSkeleton; ++i)
+    {
+        Q_T.data()[i]        = static_cast<T>(qPtr[i]);
+        K_scaled_T.data()[i] = static_cast<T>(kPtr[i]);
+    }
+
+    gsMatrix<T> Kt_f     = K_scaled_T * fProbe;                  // (H x Smax)*(Smax x1)
+    gsMatrix<T> Qf       = Q_T.transpose() * Kt_f;               // (Smax x H)*(H x1)
+    gsMatrix<T> u_manual = (Qf + static_cast<T>(epsVal) * fProbe).topRows(nSkeleton);
+
+    gsMatrix<T> u_model(nSkeleton, 1);
+    for (index_t i = 0; i < nSkeleton; ++i)
+        u_model(i, 0) = static_cast<T>(uPtr[i]);
+
+    const T maxErr = (u_manual - u_model).cwiseAbs().maxCoeff();
+    gsInfo << "  patch " << patchIndex << ": cached-formula cross-check max error = " << maxErr << "\n";
+    GISMO_ENSURE(maxErr < tol,
+        "computeCachedSchurTensors: patch " << patchIndex
+        << ": cached-formula cross-check failed, max |u_manual - u_model| = "
+        << maxErr << " exceeds tolerance " << tol
+        << ". The model's Q/K_scaled/epsilon decomposition may not match "
+        "the assumed formula for this patch.");
+
+    return gsCachedSchurTensors<T>{ std::move(Q_T), std::move(K_scaled_T), static_cast<T>(epsVal) };
+}
+
+/// @brief Zero-pads a patch's actual skeleton-sized residual up to the
+/// model's fixed max skeleton size, applies the cached
+/// u = Q @ (K_scaled^T @ f) + epsilon * f formula, and truncates the
+/// result back down -- see computeCachedSchurTensors above for where
+/// Q/K_scaled/epsilon come from. No ONNX Run() ever happens here.
+template <class T>
+class gsCachedNeuralSchurOp : public gsLinearOperator<T>
 {
 public:
-    typedef memory::shared_ptr<gsNeuralSchurOp> Ptr;
+    typedef memory::shared_ptr<gsCachedNeuralSchurOp> Ptr;
 
-    gsNeuralSchurOp(typename gsNeuralPrec<T>::Ptr nn, index_t nSkeleton)
-    : m_nn(nn), m_nSkeleton(nSkeleton)
+    gsCachedNeuralSchurOp(gsCachedSchurTensors<T> tensors,
+                         index_t maxSkeleton, index_t nSkeleton)
+    : m_t(std::move(tensors)), m_maxSkeleton(maxSkeleton), m_nSkeleton(nSkeleton)
     {
-        GISMO_ENSURE(m_nSkeleton <= m_nn->rows(),
-            "gsNeuralSchurOp: patch skeleton size " << m_nSkeleton
-            << " exceeds the model's maximum of " << m_nn->rows()
+        GISMO_ENSURE(m_nSkeleton <= m_maxSkeleton,
+            "gsCachedNeuralSchurOp: patch skeleton size " << m_nSkeleton
+            << " exceeds the model's maximum of " << m_maxSkeleton
             << ". Use a coarser discretization or a model trained with a "
             "larger maximum skeleton size.");
     }
@@ -127,14 +251,15 @@ public:
     void apply(const gsMatrix<T> & input, gsMatrix<T> & x) const override
     {
         GISMO_ASSERT(input.rows() == m_nSkeleton,
-            "gsNeuralSchurOp::apply: expected " << m_nSkeleton
+            "gsCachedNeuralSchurOp::apply: expected " << m_nSkeleton
             << " skeleton entries, got " << input.rows());
 
-        gsMatrix<T> padded = gsMatrix<T>::Zero(m_nn->rows(), 1);
+        gsMatrix<T> padded = gsMatrix<T>::Zero(m_maxSkeleton, 1);
         padded.topRows(m_nSkeleton) = input;
 
-        gsMatrix<T> out;
-        m_nn->apply(padded, out);
+        gsMatrix<T> Kt_f = m_t.K_scaled_T * padded;             // (H x Smax)*(Smax x1)
+        gsMatrix<T> Qf   = m_t.Q_T.transpose() * Kt_f;          // (Smax x H)*(H x1)
+        gsMatrix<T> out  = Qf + m_t.epsilon * padded;
 
         x = out.topRows(m_nSkeleton);
     }
@@ -143,8 +268,8 @@ public:
     index_t cols() const override { return m_nSkeleton; }
 
 private:
-    typename gsNeuralPrec<T>::Ptr m_nn;
-    index_t                       m_nSkeleton;
+    gsCachedSchurTensors<T> m_t;
+    index_t m_maxSkeleton, m_nSkeleton;
 };
 
 } // namespace gismo
@@ -176,9 +301,12 @@ int main(int argc, char *argv[])
     std::string modelPath =
         GISMO_DATA_DIR "onnx_models/"
         "model_GeometryConditionedLinearOperator_best_YetiSchurTransformer.onnx";
-    std::string nnInputName  = "input";
-    std::string nnOutputName = "output";
-    std::string nnAuxName    = "obj.1";
+    std::string nnInputName    = "input";
+    std::string nnOutputName   = "u";
+    std::string nnAuxName      = "obj.1";
+    std::string nnQName        = "Q";
+    std::string nnKScaledName  = "K_scaled";
+    std::string nnEpsilonName  = "epsilon";
     bool useCuda = false;
 
     gsCmdLine cmd("Solves a PDE with IETI, using a neural-network Schur complement inside the scaled Dirichlet preconditioner.");
@@ -198,8 +326,11 @@ int main(int argc, char *argv[])
     cmd.addInt   ("",  "num_run",               "Number of times the solve is repeated; the reported solve time is the mean over the repeats (setup is measured once)", numRun);
     cmd.addString("m", "model",                 "Path to the ONNX model file", modelPath);
     cmd.addString("",  "nnInput",               "ONNX primary input tensor name", nnInputName);
-    cmd.addString("",  "nnOutput",              "ONNX output tensor name", nnOutputName);
+    cmd.addString("",  "nnOutput",              "ONNX output tensor name (used only for the one-time setup-time formula cross-check)", nnOutputName);
     cmd.addString("",  "nnAux",                 "ONNX auxiliary (geometry) input tensor name", nnAuxName);
+    cmd.addString("",  "nnQ",                   "ONNX 'Q' output tensor name", nnQName);
+    cmd.addString("",  "nnKScaled",             "ONNX 'K_scaled' output tensor name", nnKScaledName);
+    cmd.addString("",  "nnEpsilon",             "ONNX 'epsilon' output tensor name", nnEpsilonName);
     cmd.addSwitch(     "cuda",                  "Use CUDA execution provider", useCuda);
     cmd.addString("",  "out",                   "Write solution and used options to file", out);
     cmd.addSwitch(     "plot",                  "Plot the result with Paraview", plot);
@@ -406,6 +537,26 @@ int main(int argc, char *argv[])
            << ", free local dofs <= " << maxLocal
            << " (patches are zero-padded up to these).\n";
 
+    // Head count H for the Q/K_scaled decomposition: read from the model's
+    // own 'Q' output shape [1, Smax, H], not hardcoded.
+    auto modelOutputShape = [&nnModel](const std::string & name) -> std::vector<int64_t>
+    {
+        const auto & names  = nnModel->outputNames();
+        const auto & shapes = nnModel->outputShapes();
+        for (size_t i = 0; i < names.size(); ++i)
+            if (names[i] == name) return shapes[i];
+        GISMO_ERROR("ieti_nn_example: model output '" << name << "' not found.");
+    };
+    const std::vector<int64_t> qShape = modelOutputShape(nnQName);
+    GISMO_ENSURE(qShape.size() == 3 && qShape[1] == maxSkeleton,
+        "ieti_nn_example: model output '" << nnQName << "' has shape rank "
+        << qShape.size() << ", expected [1, " << maxSkeleton << ", H].");
+    const index_t nHeads = static_cast<index_t>(qShape[2]);
+    gsInfo << "NN model head count H = " << nHeads
+           << " (from '" << nnQName << "' output shape).\n";
+
+    const real_t cacheTol = 1e-4;
+
     gsStopwatch nnTimer;
 
     for (index_t k=0; k<nPatches; ++k)
@@ -441,16 +592,11 @@ int main(int argc, char *argv[])
         gsSparseMatrix<>                 localMatrix = assembler.matrix();
         gsMatrix<>                       localRhs    = assembler.rhs();
 
-        // --- Neural Schur complement for this patch ---------------------
-        // Cheap: only allocates the per-patch I/O float buffers and the
-        // Ort::Value views over them. The ORT session and model weights
-        // are shared via nnModel. The patch's actual geometry/skeleton
-        // vectors are zero-padded up to the model's fixed max shapes by
-        // gsNeuralSchurOp (see its doc comment and the file header).
-        gsNeuralPrec<real_t>::Ptr nn = std::make_shared<gsNeuralPrec<real_t>>(
-            nnModel, nnInputName, nnOutputName
-        );
-
+        // --- Cached neural Schur complement for this patch ---------------
+        // Runs the model ONCE (computeCachedSchurTensors) to extract and
+        // cross-check Q/K_scaled/epsilon for this patch's geometry; the CG
+        // solve below then only ever calls gsCachedNeuralSchurOp::apply(),
+        // which is pure gsMatrix algebra -- no ONNX Run() per iteration.
         const gsDofMapper & dofMapperLocal = ietiMapper.dofMapperLocal(k);
         gsMatrix<real_t> features = computePatchGeometryFeatures(mp, mb, dofMapperLocal, k);
 
@@ -464,10 +610,18 @@ int main(int argc, char *argv[])
 
         gsMatrix<real_t> featuresPadded = gsMatrix<real_t>::Zero(4, maxLocal);
         featuresPadded.leftCols(features.cols()) = features;
-        nn->setAuxiliaryInput(nnAuxName, featuresPadded);
 
-        gsLinearOperator<>::Ptr nnSchurOp = std::make_shared<gsNeuralSchurOp<real_t>>(
-            nn, static_cast<index_t>(skeletonDofs.size())
+        const index_t nSkeleton = static_cast<index_t>(skeletonDofs.size());
+
+        gsCachedSchurTensors<real_t> tensors = computeCachedSchurTensors<real_t>(
+            nnModel, nnInputName, nnAuxName, nnOutputName,
+            nnQName, nnKScaledName, nnEpsilonName,
+            featuresPadded, maxSkeleton, nSkeleton, nHeads,
+            cacheTol, k
+        );
+
+        gsLinearOperator<>::Ptr nnSchurOp = std::make_shared<gsCachedNeuralSchurOp<real_t>>(
+            std::move(tensors), maxSkeleton, nSkeleton
         );
 
         prec.addSubdomain(
