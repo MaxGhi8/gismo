@@ -3,7 +3,7 @@
 This directory reproduces `hypernos/examples/train_mp_afieti_transformer.py`
 from an application outside the HyperNOs source tree.  The dataset pipeline,
 normalizer, model, and best configuration are local; the installed `hypernos`
-package is used only for its fixed-model training loop and `lpLoss`.
+package is used only for its generic training/tuning utilities and `lpLoss`.
 
 ## Files
 
@@ -11,6 +11,7 @@ package is used only for its fixed-model training loop and `lpLoss`.
 - `dataset.py`: CSV parsing, deterministic splits, normalization, and loaders.
 - `model.py`: complete geometry-conditioned linear operator definition.
 - `best_config.json`: the hyperparameters used by the original example.
+- `ray_tune.py`: Ray Tune/HyperOpt search using the local model and dataset.
 
 The 277 MB `yeti_dataset.csv` is intentionally not duplicated.  Supply its path
 with `--data`.  When this folder remains in the HyperNOs repository, the default
@@ -22,14 +23,7 @@ Create an environment with the separately installed library, then run the
 script directly so its sibling modules are imported locally:
 
 ```bash
-# NVIDIA GPU on Linux (CUDA 12.8 wheel):
-python -m pip install \
-  --index-url https://download.pytorch.org/whl/cu128 \
-  torch==2.11.0
-
-# Includes HyperNOs from its v0.1.3 source tag. The published 0.1.3 wheel
-# omits subpackages required by hypernos.loss_fun.
-python -m pip install --requirement requirements.txt
+python -m pip install -r requirements.txt
 python train.py --data /absolute/path/to/yeti_dataset.csv
 ```
 
@@ -48,3 +42,26 @@ python train.py \
 
 Training artifacts, TensorBoard logs, the flattened configuration, norm
 description, and model checkpoint are written below the selected output folder.
+
+## Hyperparameter optimization
+
+The search changes both optimizer settings and real model-capacity parameters:
+the hidden width/head count (sampled jointly so it is always valid), geometry
+encoder depth, dropout, and activation. `n_heads_A` remains fixed because this
+specific SPD implementation averages those projections, making extra values a
+redundant parameterization rather than genuinely separate attention heads.
+Batch size is also fixed: the current HyperNOs Ray validation reduction is not
+comparable across different batch sizes.
+
+```bash
+python ray_tune.py \
+  --data /absolute/path/to/yeti_dataset.csv \
+  --num-samples 40 \
+  --max-epochs 300 \
+  --grace-period 50 \
+  --cpus-per-trial 2 \
+  --gpus-per-trial 1
+```
+
+Each concurrent trial loads the wide CSV independently. Keep the number of
+simultaneous trials conservative when system memory is limited.
