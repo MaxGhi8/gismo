@@ -1,0 +1,4 @@
+-e git+https://github.com/MaxGhi8/HyperNOs.git@v0.1.3#egg=hypernos
+numpy>=2.1.0,<2.2.0
+pandas>=2.2.0,<2.3.0
+torch>=2.4.0

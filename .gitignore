@@ -9,6 +9,13 @@
 *.synctex.gz
 *.pdf
 
+# Python - HyperNOs
+__pycache__/
+**/data/mp_afieti/
+__init__.py
+**/hypernos/runs/
+.python-version
+
 # filedata
 filedata/onnx_models/
 
