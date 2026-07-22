@@ -190,21 +190,23 @@ spline space $\Shat{p} := \spann\{\bsuni{i}{p}\}_{i=1}^{m}$.
 Multivariate B-splines are constructed with tensor products; on $\refdom := (0,1)^d$,
 with a degree $p_l$ and an open knot vector per direction $l = 1, \dots, d$, we
 set $\Bref{\vect{i}}{\vect{p}}(\vect{\eta}) := \prod_{l=1}^{d}
-\bsuni{i_l}{p_l}(\eta_l)$ for $\vect{\eta} \in \refdom$. Defining a
+    \bsuni{i_l}{p_l}(\eta_l)$ for $\vect{\eta} \in \refdom$. Defining a
 colexicographical reordering into a single index $i = 1, \dots, n$, with
 $n := \prod_{l=1}^{d} m_l$, gives the reference function space $\Shat{\vect{p}} :=
-\spann\{\Bref{i}{\vect{p}}\}_{i=1}^{n}$.
+    \spann\{\Bref{i}{\vect{p}}\}_{i=1}^{n}$.
 
 The physical domain $\Omega \subset \R^{D}$ ($D \ge d$) is the image
 $\Omega = \gmap(\refdom)$ of a \emph{geometry map}
 $\gmap = \sum_{i=1}^{n} \vect{P}_i\, \Bref{i}{\vect{p}} \in
-[\Shat{\vect{p}}]^{D}$ with control points $\vect{P}_i \in \R^{D}$.
+    [\Shat{\vect{p}}]^{D}$ with control points $\vect{P}_i \in \R^{D}$.
 We assume that the geometry map is invertible with full-rank Jacobian $J_{\gmap} = D\gmap$.
 For $D = d$ the domain is planar or volumetric; for $D > d$ it is a manifold (e.g.\ a
 surface in $\R^3$), on which physical gradients use the Moore--Penrose
 pseudo-inverse $J_{\gmap}^{\dagger} = (J_{\gmap}^{\top} J_{\gmap})^{-1}
-J_{\gmap}^{\top}$ of the (full-column-rank, non-square) Jacobian; this is the
-left inverse appropriate to the tall matrix $J_{\gmap}\in\R^{D\times d}$, $D>d$
+    J_{\gmap}^{\top}$ of the (full-column-rank, non-square) Jacobian, namely
+$\nabla_\Omega u=(J_{\gmap}^{\dagger})^\top\nabla_{\vect\eta}\widehat u$.
+This is the left inverse appropriate to the tall matrix
+$J_{\gmap}\in\R^{D\times d}$, $D>d$
 (the right inverse $J_{\gmap}^{\top}(J_{\gmap}J_{\gmap}^{\top})^{-1}$ is undefined
 here, since $J_{\gmap}J_{\gmap}^{\top}\in\R^{D\times D}$ has rank $d<D$) \mg{Check this}.
 By the isoparametric paradigm~\cite{hughes2005isogeometric}, the isogeometric
@@ -216,7 +218,7 @@ space on $\Omega$ is
 \end{equation}
 NURBS are obtained by assigning weights $w_i > 0$ and replacing
 $\Bref{i}{\vect{p}}$ with $\Rnurbs{i}{\vect{p}} = w_i
-\Bref{i}{\vect{p}} / \sum_{j=1}^n w_j \Bref{j}{\vect{p}}$ (B-splines
+    \Bref{i}{\vect{p}} / \sum_{j=1}^n w_j \Bref{j}{\vect{p}}$ (B-splines
 being the case $w_i \equiv 1$); all that follows is unchanged.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -224,8 +226,8 @@ being the case $w_i \equiv 1$); all that follows is unchanged.
 
 As a model problem we take the scalar diffusion equation on an open, bounded,
 connected Lipschitz domain $\Omega \subset \R^{D}$ with $\partial\Omega =
-\overline{\Gamma_D} \cup \overline{\Gamma_N}$, $\Gamma_D \cap \Gamma_N =
-\emptyset$. Given $\alpha \in L^\infty(\Omega)$ with $\alpha \ge \alpha_0 > 0$,
+    \overline{\Gamma_D} \cup \overline{\Gamma_N}$, $\Gamma_D \cap \Gamma_N =
+    \emptyset$. Given $\alpha \in L^\infty(\Omega)$ with $\alpha \ge \alpha_0 > 0$,
 $f \in L^2(\Omega)$ and boundary data $g_D, g_N$, we seek $u$ with
 \begin{equation}
     -\nabla \cdot (\alpha \nabla u) = f \ \text{ in } \Omega,
@@ -234,7 +236,7 @@ $f \in L^2(\Omega)$ and boundary data $g_D, g_N$, we seek $u$ with
     \label{eq:poisson-strong}
 \end{equation}
 The weak form reads: find $u \in V_{g_D} := \{ v \in H^1(\Omega) : v_{|\Gamma_D}
-= g_D \}$ such that
+    = g_D \}$ such that
 \begin{equation}
     a(u, v) = F(v) \qquad \forall\, v \in V_0 := \{ v \in H^1(\Omega) :
     v_{|\Gamma_D} = 0 \},
@@ -242,11 +244,11 @@ The weak form reads: find $u \in V_{g_D} := \{ v \in H^1(\Omega) : v_{|\Gamma_D}
 \end{equation}
 with $a(u, v) := \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega$
 and $F(v) := \int_{\Omega} f v \,\mathrm{d}\Omega + \int_{\Gamma_N} g_N v
-\,\mathrm{d}s$. If $\Gamma_D = \emptyset$ (a closed surface, or pure Neumann
+    \,\mathrm{d}s$. If $\Gamma_D = \emptyset$ (a closed surface, or pure Neumann
 data), $a(\cdot,\cdot)$ is only positive semidefinite, the problem is then solvable only under the compatibility condition
 $\int_\Omega f \,\mathrm{d}\Omega + \int_{\partial\Omega} g_N \,\mathrm{d}s = 0$,
 and its solution is unique up to a constant, for example by fixing the zero mean condition $\int_\Omega u
-\,\mathrm{d}\Omega = 0$.
+    \,\mathrm{d}\Omega = 0$.
 
 We discretize on a non-overlapping multipatch decomposition into $\npatch$
 patches,
@@ -258,9 +260,9 @@ patches,
 each the image $\patchdom{k} = \gmapk{k}(\refdom)$, $k = 1, \ldots, \npatch$, of its own geometry
 map, carrying a local isogeometric space $\Vloc{k}$ of dimension $n_k$ as
 in~\eqref{eq:isogeometric-space}. The patches are assumed \emph{fully
-matching}~\cite{kleiss2012ieti}, adjacent patches share a complete edge/face with
+    matching}~\cite{kleiss2012ieti}, adjacent patches share a complete edge/face with
 coinciding basis traces, so that the conforming global space $\Vglo :=
-\{ v \in H^1(\Omega) : v_{|\patchdom{k}} \in \Vloc{k}, \ k=1, \ldots, \npatch \}$ is well defined. Given a
+    \{ v \in H^1(\Omega) : v_{|\patchdom{k}} \in \Vloc{k}, \ k=1, \ldots, \npatch \}$ is well defined. Given a
 basis $\{\Bphy{i}{\vect{p}}\}_{i=1}^{N}$ of $\Vglo$, after fixing the Dirichlet boundary conditions we define $N := \dim \Vglo$, and the
 Galerkin discretization of~\eqref{eq:weak-form} is the following linear system
 \begin{equation}
@@ -284,7 +286,7 @@ decomposition methods~\cite{farhat1991method, toselli2004domain}.
 The patches of~\eqref{eq:multipatch} serve directly as subdomains, so no
 auxiliary mesh partitioning is required.
 A defining feature of IETI-DP is that \emph{all dominant computational
-work is patch-local and parallelizable}: local stiffness assembly,
+    work is patch-local and parallelizable}: local stiffness assembly,
 Cholesky factorization of local augmented systems, and the per-iteration
 back-solves in the scaled Dirichlet preconditioner are each fully independent
 across patches \cite{kleiss2012ieti}. Only the coarse problem, of size $\nprim \times \nprim$ with $\nprim = O(K)$
@@ -293,7 +295,7 @@ primal dofs, requires global communication.
 \paragraph{Local problems and jump operator.}
 The discretization for IETI-DP method is define over the non-continuous
 space $\Vprod := \prod_{k=1}^{\npatch}
-\Vloc{k} \supset \Vglo$. Each patch carries the local stiffness matrix and load vector
+    \Vloc{k} \supset \Vglo$. Each patch carries the local stiffness matrix and load vector
 \begin{equation}
     (\Aloc{k})_{ij} := \int_{\patchdom{k}} \alpha\, \nabla \Bloc{k}{j} \cdot
     \nabla \Bloc{k}{i} \,\mathrm{d}\Omega, \qquad
@@ -309,14 +311,14 @@ $\lagmult \in \R^{\Lambda}$. Introducing the signed Boolean \emph{jump matrices}
 $\Jloc{k} \in \R^{\Lambda \times n_k}$ and $\Jfull := (\Jloc{1}, \dots, \Jloc{\npatch})$,
 the continuity constraint can be written as $\sum_{k=1}^{\npatch} \Jloc{k} \uloc{k} = \vect{0}$.
 Minimizing the broken energy $\sum_k (\tfrac12 \uloc{k}^{\top} \Aloc{k} \uloc{k} -
-\floc{k}^{\top} \uloc{k})$ subject to the continuity constraint, with
+    \floc{k}^{\top} \uloc{k})$ subject to the continuity constraint, with
 multiplier $\lagmult \in \R^{\Lambda}$, gives the saddle-point system
 \begin{equation}
     \begin{pmatrix}
-        \Aloc{1}        &        &                & \Jloc{1}^{\top}        \\
-                        & \ddots &                & \vdots                  \\
-                        &        & \Aloc{\npatch} & \Jloc{\npatch}^{\top}  \\
-        \Jloc{1}        & \cdots & \Jloc{\npatch} & 0
+        \Aloc{1} &        &                & \Jloc{1}^{\top}       \\
+                 & \ddots &                & \vdots                \\
+                 &        & \Aloc{\npatch} & \Jloc{\npatch}^{\top} \\
+        \Jloc{1} & \cdots & \Jloc{\npatch} & 0
     \end{pmatrix}
     \begin{pmatrix}
         \uloc{1} \\ \vdots \\ \uloc{\npatch} \\ \lagmult
@@ -330,7 +332,7 @@ multiplier $\lagmult \in \R^{\Lambda}$, gives the saddle-point system
 
 \paragraph{Primal constraints and Schur complement.}
 The blocks $\Aloc{k}$ of floating patches ($\partial\patchdom{k} \cap \Gamma_D =
-\emptyset$) are singular. The dual-primal approach remove the singularities selecting some \emph{primal}
+    \emptyset$) are singular. The dual-primal approach remove the singularities selecting some \emph{primal}
 degrees of freedom (dof), usually corner values and/or interface averages, stacked as the
 rows of a constraint matrix $\Cloc{k} \in \R^{q_k \times n_k}$.
 This regularizes the local blocks and introduces a global
@@ -344,14 +346,14 @@ coarse subdomain $k = \npatch + 1$:
     \faug{k} = \begin{pmatrix} \floc{k} \\ \vect{0} \end{pmatrix},
     \qquad
     \begin{aligned}
-        \Aaug{\npatch+1} &= \textstyle\sum_{k=1}^{\npatch} \Psik{k} \Aloc{k} \Psik{k}^{\top}, \\
-        \Jaug{\npatch+1} &= \textstyle\sum_{k=1}^{\npatch} \Jloc{k} \Psik{k}^{\top}, \\
-        \faug{\npatch+1} &= \textstyle\sum_{k=1}^{\npatch} \Psik{k} \floc{k}.
+        \Aaug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Psik{k} \Aloc{k} \Psik{k}^{\top}, \\
+        \Jaug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Jloc{k} \Psik{k}^{\top},          \\
+        \faug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Psik{k} \floc{k}.
     \end{aligned}
     \label{eq:augmented-blocks}
 \end{equation}
 With $\nprim$ we indicate the number of primal degrees of freedom, and $\Psik{k} \in
-\R^{\nprim \times n_k}$ represents the energy-minimizing primal basis functions;
+    \R^{\nprim \times n_k}$ represents the energy-minimizing primal basis functions;
 see~\cite{kleiss2012ieti} for the explicit construction. Eliminating the
 $\uaug{k}$ leaves an SPD system for the multipliers alone,
 \begin{equation}
@@ -371,7 +373,7 @@ and the addressing the local problems in parallel.
 \paragraph{Scaled Dirichlet preconditioner.}
 The system~\eqref{eq:ieti-schur} is large and ill-conditioned, so CG is
 preconditioned by the scaled Dirichlet preconditioner~\cite{kleiss2012ieti,
-pechstein2013finite}
+    pechstein2013finite}
 \begin{equation}
     \Psd = \sum_{k=1}^{\npatch}
     \Jskel{k}\, \Dmult{k}^{-1}\, \Sloc{k}\, \Dmult{k}^{-1}\, \Jskel{k}^{\top}.
@@ -386,59 +388,59 @@ Finally, $\Sloc{k}$ is the local Dirichlet Schur complement of $\Aloc{k}$ onto
 the skeleton. Partitioning $\Aloc{k}$ into interior and skeleton blocks,
 \begin{equation}
     \Sloc{k} = A^{(k)}_{\skel\skel}
-        - A^{(k)}_{\skel I}\, \bigl(A^{(k)}_{II}\bigr)^{-1}\, A^{(k)}_{I\skel}
+    - A^{(k)}_{\skel I}\, \bigl(A^{(k)}_{II}\bigr)^{-1}\, A^{(k)}_{I\skel}
     \ \in\ \R^{|\skel_k| \times |\skel_k|}.
     \label{eq:local-schur}
 \end{equation}
 The overall method is summarized in Algorithm~\ref{alg:ieti-dp}.
 
 \begin{algorithm}[t]
-\caption{IETI-DP solver for the model problem~\eqref{eq:poisson-strong}.}
-\label{alg:ieti-dp}
-\begin{algorithmic}[1]
-\Require multipatch $\{\patchdom{k}\}_{k=1}^{\npatch}$, data $(\alpha, f, g_D, g_N)$,
-         choice of primal degrees of freedom
-\Ensure  discrete continuous approximated solution $u_h \in \Vglo$
-\vspace{0.2cm}
-\Statex \textbf{Assembly and setup}
-\ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
-    \State assemble local stiffness $\Aloc{k}$ and load $\floc{k}$
-           \Comment{Eq.~\eqref{eq:local-stiffness}}
-    \State form jump matrix $\Jloc{k}$ and primal constraints $\Cloc{k}$
-    \State build augmented blocks $\Aaug{k}, \Jaug{k},
-           \faug{k}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
-    \State factorize $\Aaug{k}$ \Comment{one Cholesky per patch; used in all CG steps}
-\EndParFor
-\State assemble and factorize coarse blocks $\Aaug{\npatch+1},
-       \Jaug{\npatch+1}, \faug{\npatch+1}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
-\vspace{0.2cm}
-\Statex \textbf{Interface dual problem}
-\State $\gschur \gets \sum_{k=1}^{\npatch+1} \Jaug{k}
-       \Aaug{k}^{-1} \faug{k}$ \Comment{Eq.~\eqref{eq:ieti-schur}}
-\State solve $\Fschur \lagmult = \gschur$ by preconditioned CG, where $\Fschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1} \Jaug{k}^{\top}$
-\vspace{0.2cm}
-\Statex \textbf{Reconstruction}
-\State solve the primal problem:
-       $\uaug{\npatch+1} \gets \Aaug{\npatch+1}^{-1}
-       (\faug{\npatch+1} - \Jaug{\npatch+1}^{\top} \lagmult)$ \Comment{global coarse problem}
-\ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
-    \State $\uaug{k} \gets \Aaug{k}^{-1}
-           (\faug{k} - \Jaug{k}^{\top} \lagmult)$
-\EndParFor
-\State assemble $u_h \in \Vglo$ from $\{\uaug{k}\}_{k=1}^{\npatch}$
-\State \Return $u_h$
-\end{algorithmic}
+    \caption{IETI-DP solver for the model problem~\eqref{eq:poisson-strong}.}
+    \label{alg:ieti-dp}
+    \begin{algorithmic}[1]
+        \Require multipatch $\{\patchdom{k}\}_{k=1}^{\npatch}$, data $(\alpha, f, g_D, g_N)$,
+        choice of primal degrees of freedom
+        \Ensure  discrete continuous approximated solution $u_h \in \Vglo$
+        \vspace{0.2cm}
+        \Statex \textbf{Assembly and setup}
+        \ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
+        \State assemble local stiffness $\Aloc{k}$ and load $\floc{k}$
+        \Comment{Eq.~\eqref{eq:local-stiffness}}
+        \State form jump matrix $\Jloc{k}$ and primal constraints $\Cloc{k}$
+        \State build augmented blocks $\Aaug{k}, \Jaug{k},
+            \faug{k}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
+        \State factorize $\Aaug{k}$ \Comment{one Cholesky per patch; used in all CG steps}
+        \EndParFor
+        \State assemble and factorize coarse blocks $\Aaug{\npatch+1},
+            \Jaug{\npatch+1}, \faug{\npatch+1}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
+        \vspace{0.2cm}
+        \Statex \textbf{Interface dual problem}
+        \State $\gschur \gets \sum_{k=1}^{\npatch+1} \Jaug{k}
+            \Aaug{k}^{-1} \faug{k}$ \Comment{Eq.~\eqref{eq:ieti-schur}}
+        \State solve $\Fschur \lagmult = \gschur$ by preconditioned CG, where $\Fschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1} \Jaug{k}^{\top}$
+        \vspace{0.2cm}
+        \Statex \textbf{Reconstruction}
+        \State solve the primal problem:
+        $\uaug{\npatch+1} \gets \Aaug{\npatch+1}^{-1}
+            (\faug{\npatch+1} - \Jaug{\npatch+1}^{\top} \lagmult)$ \Comment{global coarse problem}
+        \ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
+        \State $\uaug{k} \gets \Aaug{k}^{-1}
+            (\faug{k} - \Jaug{k}^{\top} \lagmult)$
+        \EndParFor
+        \State assemble $u_h \in \Vglo$ from $\{\uaug{k}\}_{k=1}^{\npatch}$
+        \State \Return $u_h$
+    \end{algorithmic}
 \end{algorithm}
 
 \begin{rmk}[Parallel structure and serial cost] \label{rmk:schur-cost}
-Each preconditioned CG step applies $\Psd$ via $K$ local Schur-complement
-solves (Eq.~\eqref{eq:local-schur}), each requiring one interior back-solve
-with the precomputed factorization of $\Aaug{k}$.
-These $K$ solves are mutually independent and constitute the dominant
-per-iteration cost~\cite[\S4.5]{kleiss2012ieti}.
-On a single processor: $O(K p\,n_k^{3/2})$ per CG step.
-The ideal case is to have $K$ processors in order to have the
-total cost independet from $K$, i.e. $O(p\,n_k^{3/2})$ per CG step.
+    Each preconditioned CG step applies $\Psd$ via $K$ local Schur-complement
+    solves (Eq.~\eqref{eq:local-schur}), each requiring one interior back-solve
+    with the precomputed factorization of $\Aaug{k}$.
+    These $K$ solves are mutually independent and constitute the dominant
+    per-iteration cost~\cite[\S4.5]{kleiss2012ieti}.
+    On a single processor: $O(K p\,n_k^{3/2})$ per CG step.
+    The ideal case is to have $K$ processors in order to have the
+    total cost independet from $K$, i.e. $O(p\,n_k^{3/2})$ per CG step.
 \end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -458,13 +460,15 @@ shared across all patches.
 \subsection{Formulation}
 \label{subsec:formulation}
 
-Let $\vect{\zeta}_k \in \R^{n_k \times (D+1)}$ be the \emph{geometry descriptor}
-of patch $k$: the $i$-th entry collects the physical coordinates of the Greville
+Let $\mathcal F_k$ be the indices left after strong elimination of Dirichlet
+degrees of freedom and let $n_k^f=|\mathcal F_k|$.  The \emph{geometry
+    descriptor} $\vect{\zeta}_k \in \R^{n_k^f \times (D+1)}$ of patch $k$ collects,
+for every $i\in\mathcal F_k$, the physical coordinates of the Greville
 abscissa $\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i) \in \R^D$ \cite{cottrell2009isogeometric}, and its NURBS weight $w_i$,
 \begin{equation}
     \vect{\zeta}_k
     = \bigl\{ \bigl(\gmapk{k}(\vect{\eta}^{\,\mathrm{Gr}}_i),\, w_i\bigr)
-      \bigr\}_{i=1}^{n_k}.
+    \bigr\}_{i\in\mathcal F_k}.
     \label{eq:geom-features}
 \end{equation}
 We define the \emph{neural Schur operator} with shared weights $\theta$ as
@@ -488,43 +492,62 @@ into \eqref{eq:scaled-dirichlet}:
 \subsection{Architecture}
 \label{subsec:architecture}
 
-The network takes only $\vect{\zeta}_k$ as input and outputs a matrix
-$M_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times |\skel_k|}$\mg{dipendenza da k, capire come gestirla, se fare proiezione e prolungamento o supporre che siano tutte uguali tra loro}, so that
+The Open Neural Network Exchange (ONNX) model has fixed capacities
+$N_{\max}$ geometry tokens and
+$S_{\max}$ skeleton entries.  Let $E_k$ denote zero-padding from $n_k^f$ to
+$N_{\max}$ tokens and let $R_k\in\R^{|\skel_k|\times S_{\max}}$ restrict a
+padded skeleton vector to its active entries.  The network takes only
+$\widehat{\vect{\zeta}}_k=E_k\vect{\zeta}_k$ as input and defines
+$M_{\theta,k}\in\R^{|\skel_k|\times|\skel_k|}$, so that
 \begin{equation}
-    \Snn(\vect{v};\,\vect{\zeta}_k) = M_\theta(\vect{\zeta}_k)\,\vect{v}.
+    \Snn(\vect{v};\,\vect{\zeta}_k) = M_{\theta,k}\vect{v}.
     \label{eq:matrix-form}
 \end{equation}
 Linearity in $\vect{v}$ is immediate since $\vect{v}$ is not an input to the
 network.
-$M_\theta(\vect{\zeta}_k)$ is parameterized in the SPD factorized form, see [CITE]\mg{fix citation once available}, as
+$M_{\theta,k}$ is parameterized in the SPD factorized form
 \begin{equation}
-    M_\theta(\vect{\zeta}_k)
-    = \frac{1}{\sqrt{\dv}}\,
-      Q_\theta(\vect{\zeta}_k)\,
-      Q_\theta(\vect{\zeta}_k)^{\top}
-      + \varepsilon_\theta\, I,
+    M_{\theta,k}
+    =R_k\left(
+    \frac{1}{\sqrt{\dv}}\,
+    Q_\theta(\widehat{\vect{\zeta}}_k)\,
+    Q_\theta(\widehat{\vect{\zeta}}_k)^{\top}
+    + \varepsilon_\theta I_{S_{\max}}\right)R_k^\top,
     \label{eq:spd-param}
 \end{equation}
-where $Q_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times \dv}$, $\dv$ is the
-latent dimension, and $\varepsilon_\theta > 0$ is a learnable scalar.
-The matrix $M_\theta(\vect{\zeta}_k)$ is SPD
-for any $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta > 0$.
-Applying~\eqref{eq:spd-param} costs $O(|\skel_k|\dv)$ via two matrix--vector
-products.
+where $Q_\theta(\widehat{\vect{\zeta}}_k)\in
+    \R^{S_{\max}\times\dv}$, $\dv$ is the latent dimension, and
+$\varepsilon_\theta=\operatorname{softplus}(\widehat\varepsilon_\theta)>0$
+is a learned scalar.  Therefore $M_{\theta,k}$ is SPD for every network
+output.  Its matrix-free application costs $O(S_{\max}\dv)$ through two
+dense matrix--vector products; the Transformer is evaluated only once per
+patch during setup and the factors are then cached.
 
-The factor $Q_\theta(\vect{\zeta}_k)$ is computed by the IgaNet Transformer
-encoder, the entries of $\vect{\zeta}_k$ are treated as
-a sequence of $n_k$ tokens in $\R^{D+1}$, processed through a learnable affine
+The factor $Q_\theta(\widehat{\vect{\zeta}}_k)$ is computed by the IgaNet
+Transformer encoder.  The padded descriptor is treated as a sequence of
+$N_{\max}$ tokens in $\R^{D+1}$, processed through a learnable affine
 embedding plus sinusoidal positional encoding,
 followed by $L$ layers of multi-head self-attention~\cite{vaswani2017attention}.
 A cross-attention resampling step then maps the encoded sequence to
-$G_\theta(\vect{\zeta}_k) \in \R^{|\skel_k| \times \dv}$ using $|\skel_k|$ learnable target
-queries, and a final linear projection gives $Q_\theta(\vect{\zeta}_k) = G_\theta(\vect{\zeta}_k) W_Q$.
-We refer to [CITE] for the complete architecture details.
+$G_\theta(\widehat{\vect{\zeta}}_k)\in\R^{S_{\max}\times\dv}$ using
+$S_{\max}$ learned target queries, and a final linear projection gives
+$Q_\theta=G_\theta W_Q$.  In the present implementation
+$(N_{\max},S_{\max})=(304,48)$.  Zero padding is part of the tensor contract.
+The original Yeti-only checkpoint supplies no padding mask, so a patch far
+below these capacities must be treated as out of distribution.  The
+geometry-diverse model in Section~\ref{subsec:nn-diverse-data} corrects this
+with an explicit mask.
 
 \begin{rmk}[PCG compatibility]
-\label{rmk:linearity}
-Since the preconditioner $\Pneural$ in~\eqref{eq:neural-prec} is a linear SPD preconditioner, it is compatible with the standard PCG without modifications. Furthermore we can adopt our preconditioner in the CG solver of the lagrange multiplier system~\eqref{eq:ieti-schur} without adopting flexible variants.
+    \label{rmk:linearity}
+    Each $M_{\theta,k}$ is fixed during a solve and SPD.  Hence
+    $\Pneural$ is symmetric positive semidefinite and is positive definite on the
+    admissible multiplier space when the assembled scaled jump operators have full
+    row rank (after redundant multiplier constraints are removed), exactly the
+    space on which~\eqref{eq:ieti-schur} is SPD.  Thus standard preconditioned
+    conjugate gradient (PCG) applies; a
+    flexible Krylov method would only be necessary if the learned factors were
+    updated during the iteration~\cite{saad1993flexible}.
 \end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -532,61 +555,72 @@ Since the preconditioner $\Pneural$ in~\eqref{eq:neural-prec} is a linear SPD pr
 \label{subsec:training}
 
 \paragraph{Dataset.}
-For each patch geometry in a training collection, $N_{\mathrm{data}} = 20\,000$
-probe vectors $\vect{v}^{(i)} \in \R^{|\skel_k|}$ are drawn from a Gaussian
+The generator produces $N_{\mathrm{data}}=20\,000$ rows in total,
+distributed as evenly as possible over the 21 yeti patches.  For each row a
+probe vector $\vect{v}^{(i)} \in \R^{|\skel_k|}$ is drawn from a Gaussian
 random field (GRF) on the skeleton~\cite{adler2010geometry} with exponential
 covariance
 \begin{equation}
     \mathrm{Cov}\bigl(\vect{v}(\vect{x}),\, \vect{v}(\vect{y})\bigr)
-    = \sigma^2 \exp\!\Bigl(-\frac{\|\vect{x}-\vect{y}\|}{\lambda}\Bigr),
-    \quad \lambda = 2d^2,\; d = 0.05,\; \sigma = 1,
+    = \sigma_c^2 \exp\!\Bigl(-\frac{\|\vect{x}-\vect{y}\|}{\ell_c}\Bigr),
+    \qquad \ell_c = 0.005,\quad \sigma_c = 1,
     \label{eq:grf-cov}
 \end{equation}
 following~\cite{kopanivcakova2025deeponet}.
+Here $\vect{x},\vect{y}\in\R^D$ are physical skeleton coordinates,
+$\ell_c$ is the physical correlation length, and $\sigma_c$ is the marginal
+standard deviation.  The subscript $c$ anticipates that this is the dataset for
+the coarse training discretization introduced below.
 The probe vectors are not network inputs; they evaluate the loss.
 Targets $\Sloc{k}\vect{v}^{(i)}$ are computed from the local factorizations in
 Algorithm~\ref{alg:ieti-dp}.
-The dataset is split into training (80\%), validation (10\%), and test (10\%) sets.
+Rows are shuffled and split into $16\,000/2\,000/2\,000$ training,
+validation, and test samples.  Since every patch contributes rows before this
+split, the test loss measures new probes on the same 21 geometries; it is not a
+held-out-geometry generalization estimate.  The teapot experiment in
+Section~\ref{sec:nn-comparison} supplies that stricter test.
 
 \paragraph{Loss.}
 \begin{equation}
-    \mathrm{Loss}
+    \mathcal L_{\mathrm{train}}
     = \frac{1}{N_{\mathrm{train}}}
-      \sum_{i=1}^{N_{\mathrm{train}}}
-      \Bigl(\frac{1}{|\skel_k|}
-        \bigl\|M_\theta(\vect{\zeta}_k)\,\vect{v}^{(i)}
-              - \Sloc{k}\vect{v}^{(i)}
-        \bigr\|^2_2
-      \Bigr)^{1/2}.
+    \sum_{i=1}^{N_{\mathrm{train}}}
+    \bigl\|M_{\theta,k(i)}\,\vect{v}^{(i)}
+    - \Sloc{k(i)}\vect{v}^{(i)}
+    \bigr\|_2.
     \label{eq:loss}
 \end{equation}
+Here $N_{\mathrm{train}}=16\,000$ and $k(i)\in\{1,\ldots,21\}$ identifies the
+patch from which sample $i$ was generated.
 
 \paragraph{Optimizer and hyperparameters.}
-Training uses AdamW~\cite{loshchilov2019decoupledweightdecayregularization} for
-$500$ epochs (batch size $100$) with step learning-rate decay.
-Hyperparameters are selected by HyperNOs~\cite{ghiotto2025hypernos} via
-TPE~\cite{watanabe2023tree,bergstra2015hyperopt} and
-ASHA~\cite{li2020massivelyparallelhyperparametertuning} over $200$ trials.
-The search space is:
+Training uses AdamW~\cite{loshchilov2019decoupledweightdecayregularization}
+with batch size 100.  The selected full-rank candidate uses $\dv=48$, four
+attention heads, three geometry-encoder layers, learning rate $10^{-3}$,
+weight decay $10^{-4}$ and zero dropout.  It is trained in successive
+100-epoch stages, reloading the weights and restarting the optimizer between
+stages.  The lower-rank reference has $\dv=20$.  The accompanying
+\texttt{ray\_tune.py} can run TPE~\cite{watanabe2023tree,bergstra2015hyperopt}
+and ASHA~\cite{li2020massivelyparallelhyperparametertuning} through
+HyperNOs~\cite{ghiotto2025hypernos}; this facility was not used to select the
+reported checkpoint, so no hyperparameter-search claim is made here.  Its
+configured search space is:
 \begin{center}
-\begin{tabular}{ll}
-    \toprule
-    Hyperparameter & Range \\
-    \midrule
-    Learning rate $\lambda$ & $[10^{-4}, 10^{-2}]$ \\
-    LR reduction factor $\eta$ & $[0.75, 0.99]$ \\
-    Weight decay $w$ & $[10^{-6}, 10^{-4}]$ \\
-    Dropout~\cite{srivastava2014dropout} $\gamma$ & $[0.00, 0.10]$ \\
-    Encoder layers $L$ & $\{1, \dots, 5\}$ \\
-    Encoder heads $n_h$ & divisors of $\dv$ \\
-    Output heads $H$ & $\{1, 3\}$ \\
-    Attention activation $\sigma$ & $\{\mathrm{ReLU}, \mathrm{GELU}, \mathrm{Softmax}\}$ \\
-    \bottomrule
-\end{tabular}
+    \begin{tabular}{ll}
+        \toprule
+        Hyperparameter                       & Range                                         \\
+        \midrule
+        Learning rate                        & $[5\cdot10^{-5},3\cdot10^{-3}]$ (log-uniform) \\
+        Weight decay                         & $[10^{-7},10^{-3}]$ (log-uniform)             \\
+        Dropout~\cite{srivastava2014dropout} & $\{0,0.05,0.10,0.15\}$                        \\
+        Encoder layers                       & $\{1,2,3,4\}$                                 \\
+        Latent width / heads                 & 15 compatible layouts from $16/1$ to $64/8$   \\
+        Activation                           & $\{\mathrm{ReLU},\mathrm{GELU}\}$             \\
+        \bottomrule
+    \end{tabular}
 \end{center}
-The latent dimension $\dv$ and output heads $H$ are fixed per configuration;
-optimal hyperparameters and training results are reported in
-Section~\ref{sec:reference-benchmark}.
+Training and solver-level results are reported in
+Section~\ref{sec:nn-comparison}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -595,8 +629,9 @@ Section~\ref{sec:reference-benchmark}.
 \section{Reference benchmark}
 \label{sec:reference-benchmark}
 
-All experiments run on a 12-core machine with shared-memory parallelism,
-stopping tolerance $10^{-8}$, and maximum $1000$ iterations.\mg{State CPU model.}
+All experiments run on an AMD Ryzen 5 7600 processor (six physical cores,
+12 hardware threads) with shared-memory parallelism, stopping tolerance
+$10^{-8}$, and maximum $1000$ iterations.
 Timings are the mean over five repetitions.
 
 \subsection{Setup} \label{subsec:bench-setup}
@@ -629,37 +664,37 @@ diameter is $H\sim K^{-1/2}$ and the \emph{global} mesh size is $h\sim N^{-1/2}$
 so the number of elements across a patch is $H/h\sim n_k^{1/2}$, independent
 of $K$. We stress the distinction between the two sweeps that vary the
 partition: \emph{refinement} fixes $K$ and grows $n_k$, whereas \emph{patch
-splitting} fixes $n_k$ and grows $K$ (with $N=K\,n_k$). Table~\ref{tab:theory} summarises the predicted serial and parallel
+    splitting} fixes $n_k$ and grows $K$ (with $N=K\,n_k$). Table~\ref{tab:theory} summarises the predicted serial and parallel
 ($K$ processors, one per patch) costs with explicit dependence on $n_k$, $K$,
 and $p$; the text below justifies each entry.
 
 \begin{table}[h]
-  \centering
-  \caption{Asymptotic scalings with explicit dependence on $n_k$ (DOFs per patch),
-    $K$ (subdomains), and $p$ (degree).
-    ``iters'': iteration count to tolerance~$\varepsilon$;
-    ``serial'': total cost on one processor; ``parallel'': wall-clock cost on $K$ processors
-    (one per patch).
-    The multigrid $O(1)$ iteration count assumes a fixed low degree and a
-    quasi-uniform mesh of a flat domain; with point smoothers it is not robust in
-    $p$ (the $V$-cycle contraction factor approaches $1$ as $p$ grows) and breaks
-    down on the strongly distorted curved manifold (see Section~\ref{subsec:theory}).
-    Only IETI-DP is inherently patch-parallel; remaining solvers act on the global system serially.}
-  \label{tab:theory}
-  \small
-  \begin{tabular}{lccc}
-    \toprule
-    Method                        & iters                                             & serial                                      & parallel ($K$ procs)                    \\
-    \midrule
-    Direct (Cholesky)             & ---                                               & $O(p^3 K^{3/2}n_k^{3/2})$                 & ---                                     \\
-    GMRES (no prec)               & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
-    GMRES + Jac./S-GS      & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
-    CG (no prec)                  & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
-    CG + Jac./S-GS         & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$  & ---                                     \\
-    Multigrid        & $O(1)$                                            & $O(K\,n_k)$                                & ---                                     \\
-    IETI-DP                       & $O\!\bigl(\sqrt{p}(1+\log p+\log n_k)\bigr)$ & $O(K p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ & $O(p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ \\
-    \bottomrule
-  \end{tabular}
+    \centering
+    \caption{Asymptotic scalings with explicit dependence on $n_k$ (DOFs per patch),
+        $K$ (subdomains), and $p$ (degree).
+        ``iters'': iteration count to tolerance~$\varepsilon$;
+        ``serial'': total cost on one processor; ``parallel'': wall-clock cost on $K$ processors
+        (one per patch).
+        The multigrid $O(1)$ iteration count assumes a fixed low degree and a
+        quasi-uniform mesh of a flat domain; with point smoothers it is not robust in
+        $p$ (the $V$-cycle contraction factor approaches $1$ as $p$ grows) and breaks
+        down on the strongly distorted curved manifold (see Section~\ref{subsec:theory}).
+        Only IETI-DP is inherently patch-parallel; remaining solvers act on the global system serially.}
+    \label{tab:theory}
+    \small
+    \begin{tabular}{lccc}
+        \toprule
+        Method            & iters                                        & serial                                  & parallel ($K$ procs)                  \\
+        \midrule
+        Direct (Cholesky) & ---                                          & $O(p^3 K^{3/2}n_k^{3/2})$               & ---                                   \\
+        GMRES (no prec)   & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$   & ---                                   \\
+        GMRES + Jac./S-GS & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$   & ---                                   \\
+        CG (no prec)      & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$   & ---                                   \\
+        CG + Jac./S-GS    & $O(p^{d+1} 2^{pd} K^{1/2} n_k^{1/2})$        & $O(p^{d+1} 2^{pd} K^{3/2} n_k^{3/2})$   & ---                                   \\
+        Multigrid         & $O(1)$                                       & $O(K\,n_k)$                             & ---                                   \\
+        IETI-DP           & $O\!\bigl(\sqrt{p}(1+\log p+\log n_k)\bigr)$ & $O(K p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ & $O(p^{3/2}\,n_k^{3/2}\!\log(p\,n_k))$ \\
+        \bottomrule
+    \end{tabular}
 \end{table}
 
 \paragraph{Direct solver.}
@@ -673,8 +708,8 @@ factor $p$, raising the factorization cost to $O(p^3 N^{3/2})$ in 2D.
 \paragraph{Conjugate gradient.}
 The stiffness matrix condition number satisfies~\cite[Thm.~4.3]{gahalaut2019condition}
 \begin{equation}
-  \kappa(A) \;\sim\; h^{-2} \;\sim\; N \;=\; K\,n_k .
-  \label{eq:kappa-cg}
+    \kappa(A) \;\sim\; h^{-2} \;\sim\; N \;=\; K\,n_k .
+    \label{eq:kappa-cg}
 \end{equation}
 Denoting the error at step $k$ by $e_k = x_*-x_k$ and the
 energy norm by $\|v\|_A=(Av,v)^{1/2}$, the CG convergence
@@ -682,7 +717,7 @@ bound~\cite[Thm.~6.29]{saad2003iterative} gives
 $\|e_k\|_{A} \le 2\!\left(\tfrac{\sqrt{\kappa(A)}-1}{\sqrt{\kappa(A)}+1}\right)^{\!k}\|e_0\|_{A}$,
 the number of iterations to reach tolerance $\varepsilon$ scales as
 $O\!\left(\sqrt{\kappa(A)}\log(1/\varepsilon)\right)\sim O\!\left(N^{1/2}\right)
-=O\!\left((K n_k)^{1/2}\right)$
+    =O\!\left((K n_k)^{1/2}\right)$
 and the total serial solve cost as
 $O\!\left(N^{3/2}\right)=O\!\left(K^{3/2} n_k^{3/2}\right)$.
 For degree elevation at fixed $h$ the condition number grows
@@ -720,28 +755,28 @@ under strong geometric distortion; both properties are observed in
 Section~\ref{subsubsec:bench-3d-sweeps}.
 
 \begin{itemize}
-\item[(i)] \textbf{Degree.}
-For tensor-product splines of degree $p$, the spectral (symbol) analysis of the
-Galerkin matrices shows that a fixed-size subspace of high-frequency,
-maximal-continuity ($C^{p-1}$) modes is increasingly poorly damped by classical
-point smoothers (Jacobi, Gauss--Seidel) as $p$ grows; consequently the
-contraction factor of the standard $V$-cycle deteriorates towards $1$ and the
-iteration count grows with $p$~\cite{donatelli2015robust,tielen2020pmultigrid}.
-% Restoring $p$-robustness requires spectrally corrected (multi-iterative)
-% smoothers~\cite{donatelli2015robust} or smoothers based on stable splittings of
-% the spline space, for which a contraction factor independent of both $h$ and $p$
-% has been proved~\cite{hofreither2017robust}; the standard point-smoothed
-% $V$-cycle used here is deliberately taken as the baseline.
-\item[(ii)] \textbf{Geometry.}
-On a curved manifold the diffusion bilinear form pulls back to an elliptic
-problem on $\refdom$ with the spatially varying, generally anisotropic
-coefficient tensor $\sqrt{\det G}\,G^{-1}$, where $G=J_{\gmap}^{\top}J_{\gmap}$ is
-the first fundamental form of the geometry map, see Eq.~\eqref{eq:laplace-beltrami}.
-Strong, geometry-induced anisotropy and variation of $G^{-1}$ violate the
-constant-coefficient heuristics behind isotropic $h$-coarsening with point
-smoothers: the smoothing property degrades, the contraction factor need not stay
-below $1$, and the iteration count may grow with $N$ or stagnate
-altogether~\cite{trottenberg2000multigrid}.
+    \item[(i)] \textbf{Degree.}
+          For tensor-product splines of degree $p$, the spectral (symbol) analysis of the
+          Galerkin matrices shows that a fixed-size subspace of high-frequency,
+          maximal-continuity ($C^{p-1}$) modes is increasingly poorly damped by classical
+          point smoothers (Jacobi, Gauss--Seidel) as $p$ grows; consequently the
+          contraction factor of the standard $V$-cycle deteriorates towards $1$ and the
+          iteration count grows with $p$~\cite{donatelli2015robust,tielen2020pmultigrid}.
+          % Restoring $p$-robustness requires spectrally corrected (multi-iterative)
+          % smoothers~\cite{donatelli2015robust} or smoothers based on stable splittings of
+          % the spline space, for which a contraction factor independent of both $h$ and $p$
+          % has been proved~\cite{hofreither2017robust}; the standard point-smoothed
+          % $V$-cycle used here is deliberately taken as the baseline.
+    \item[(ii)] \textbf{Geometry.}
+          On a curved manifold the diffusion bilinear form pulls back to an elliptic
+          problem on $\refdom$ with the spatially varying, generally anisotropic
+          coefficient tensor $\sqrt{\det G}\,G^{-1}$, where $G=J_{\gmap}^{\top}J_{\gmap}$ is
+          the first fundamental form of the geometry map, see Eq.~\eqref{eq:laplace-beltrami}.
+          Strong, geometry-induced anisotropy and variation of $G^{-1}$ violate the
+          constant-coefficient heuristics behind isotropic $h$-coarsening with point
+          smoothers: the smoothing property degrades, the contraction factor need not stay
+          below $1$, and the iteration count may grow with $N$ or stagnate
+          altogether~\cite{trottenberg2000multigrid}.
 \end{itemize}
 
 
@@ -750,9 +785,9 @@ The spectral bound for the preconditioned interface
 system~\eqref{eq:ieti-schur}--\eqref{eq:scaled-dirichlet}
 \cite{schneckenleitner2020condition} is:
 \begin{equation}
-  \kappa\!\left(M_{sD}^{-1}F\right)
-  \;\leq\; C\,p\,\bigl(1+\log p+\log(H/h)\bigr)^{2},
-  \label{eq:kappa-ieti}
+    \kappa\!\left(M_{sD}^{-1}F\right)
+    \;\leq\; C\,p\,\bigl(1+\log p+\log(H/h)\bigr)^{2},
+    \label{eq:kappa-ieti}
 \end{equation}
 where $C>0$ is independent of $h$, $H$, $K$, $N$, and $p$.
 By the CG convergence bound~\cite[Thm.~6.29]{saad2003iterative}, the number of iterations to
@@ -762,29 +797,29 @@ and the dominant per-iteration cost is $O(K\,p\,n_k^{3/2})$ in serial
 and $O(p\,n_k^{3/2})$ on $K$ parallel processors (Remark~\ref{rmk:schur-cost}).
 Three consequences govern the parameter sweeps.
 \begin{itemize}
-  \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim n_k^{1/2}$
-    gives $\kappa=O(\log^{2}n_k)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log n_k)$ CG iterations.
-  \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h\sim n_k^{1/2}$
-    stays constant as $K$ grows, so the bound~\eqref{eq:kappa-ieti} is
-    independent of $K$ and predicts near-constant conditioning. 
-    % The mild increase of the IETI-DP iteration count observed
-    % with $K$ (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps})
-    % reflects the constant in~\eqref{eq:kappa-ieti} and the inexactness of the
-    % coarse solve, not a missing power of $K$; the dominant $K$-growth of the cost
-    % is algebraic, since each CG step performs $K$ local back-solves and the
-    % Lagrange-multiplier system grows with $K$.
-  \item[(iii)] \textbf{Degree} ($h$ fixed):
-    $\kappa=O\!\left(p\,(1+\log p)^{2}\right)$ \cite{schneckenleitner2020condition},
-    giving $O\!\left(\sqrt{p}\,(1+\log p)\right)$ CG iterations.
-    % , this is algebraic growth
-    % that is far milder than the super-algebraic $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$
-    % for unpreconditioned CG.
+    \item[(i)] \textbf{Refinement} ($K$ fixed): $H/h\sim n_k^{1/2}$
+          gives $\kappa=O(\log^{2}n_k)$ and hence $O\!\left(\sqrt{\kappa}\right)=O(\log n_k)$ CG iterations.
+    \item[(ii)] \textbf{Subdomain} ($h,p$ fixed per patch): $H/h\sim n_k^{1/2}$
+          stays constant as $K$ grows, so the bound~\eqref{eq:kappa-ieti} is
+          independent of $K$ and predicts near-constant conditioning.
+          % The mild increase of the IETI-DP iteration count observed
+          % with $K$ (Sections~\ref{subsubsec:bench-2d-sweeps}--\ref{subsubsec:bench-3d-sweeps})
+          % reflects the constant in~\eqref{eq:kappa-ieti} and the inexactness of the
+          % coarse solve, not a missing power of $K$; the dominant $K$-growth of the cost
+          % is algebraic, since each CG step performs $K$ local back-solves and the
+          % Lagrange-multiplier system grows with $K$.
+    \item[(iii)] \textbf{Degree} ($h$ fixed):
+          $\kappa=O\!\left(p\,(1+\log p)^{2}\right)$ \cite{schneckenleitner2020condition},
+          giving $O\!\left(\sqrt{p}\,(1+\log p)\right)$ CG iterations.
+          % , this is algebraic growth
+          % that is far milder than the super-algebraic $\kappa(A_h)\leq C\,p^{2d+2}4^{pd}$
+          % for unpreconditioned CG.
 \end{itemize}
 
 After solving the system~\eqref{eq:ieti-schur}, the reconstruction step (Algorithm~\ref{alg:ieti-dp}, lines 10--15)
 recovers each $\uaug{k}$ by one back-solve with the precomputed $\Aaug{k}$
 factorization, costing $O(K\,p\,n_k^{3/2})$ in serial or $O(p\,n_k^{3/2})$
-in parallel. This is equivalent to a single CG iteration, so the total solve cost is driven by 
+in parallel. This is equivalent to a single CG iteration, so the total solve cost is driven by
 the cost of the resolution of the interface problem~\eqref{eq:ieti-schur}.
 
 % \noindent\emph{Condition number verification.}
@@ -830,45 +865,46 @@ $\npatch = 21$ patches (Figure~\ref{fig:yeti-refcase}), all sides Dirichlet.
         \label{fig:yeti-refcase-sol}
     \end{subfigure}
     \caption{The reference 2D case is the yeti domain, we represent:
-     the multipatch discretization in Fig. \ref{fig:yeti-refcase-mesh}, 
-     the source term in Fig. \ref{fig:yeti-refcase-rhs}, and the IETI solution in Fig. \ref{fig:yeti-refcase-sol}.}
+        the multipatch discretization in Fig. \ref{fig:yeti-refcase-mesh},
+        the source term in Fig. \ref{fig:yeti-refcase-rhs}, and the IETI solution in Fig. \ref{fig:yeti-refcase-sol}.}
     \label{fig:yeti-refcase}
 \end{figure}
 
 \subsubsection{Reference case} \label{subsubsec:bench-2d-reference}
 
 The reference case uses $p = 2$, $r = 4$: $N = 87\,552$ dofs, $\Lambda = 1536$
-Lagrange multipliers. Every patch corner is a Dirichlet node. Table~\ref{tab:yeti-reference} separates
-setup (one-time local Cholesky factorization) from solve (Krylov iterations).
-IETI-DP has the cheapest solve at $0.12\,$s, $5.8\times$
+Lagrange multipliers. Every patch corner is a Dirichlet node.  Throughout this
+section, ``solve time'' starts with the first iterative update and ends when the
+stopping tolerance is reached; assembly, factorization and every other setup
+operation are excluded.  IETI-DP has the cheapest solve at $0.11\,$s, $6.3\times$
 faster than multigrid standalone at $0.69\,$s.
 
 \begin{table}[t]
     \centering
     \caption{Reference case (yeti domain, $\npatch = 21$, $p = 2$, $r = 4$;
-    $N = 87\,552$). Setup is measured once; solve times are means over 10 runs.
-    Tolerance $10^{-8}$; maximum 1\,000 iterations. All methods converged.
-    Global solvers run on 1 thread (timing unchanged with more threads).
-    IETI-DP iteration counts are CG steps on the interface
-    problem~\eqref{eq:ieti-schur} and are not directly comparable with the
-    global-system counts.}
+        $N = 87\,552$). Setup is measured once; solve times are means over 10 runs.
+        Tolerance $10^{-8}$; maximum 1\,000 iterations. All methods converged.
+        Global solvers run on 1 thread (timing unchanged with more threads).
+        IETI-DP iteration counts are CG steps on the interface
+        problem~\eqref{eq:ieti-schur} and are not directly comparable with the
+        global-system counts.}
     \label{tab:yeti-reference}
     \begin{tabular}{lccc}
         \toprule
-        Method & setup [s] & solve [s] & iters \\
+        Method                        & setup [s] & solve [s]     & iters \\
         \midrule
-        Direct Cholesky                  & 0.13 & 0.47  & ---  \\
-        GMRES (no preconditioner)        & 0.13 & 4.85  & 397  \\
-        GMRES + Jacobi                   & 0.13 & 2.58  & 280  \\
-        GMRES + symm. Gauss--Seidel      & 0.13 & 4.57  & 100  \\
-        CG (no preconditioner)           & 0.13 & 0.47  & 446  \\
-        CG + Jacobi                      & 0.13 & 0.46  & 319  \\
-        CG + symm. Gauss--Seidel         & 0.13 & 3.23  & 104  \\
-        Multigrid (standalone)           & 0.21 & 0.69  & 18   \\
-        IETI-DP (no prec, 1 thread)      & 2.89 & 1.54  & 64   \\
-        IETI-DP (no prec, 12 threads)    & 2.48 & 0.26  & 64   \\
-        IETI-DP (1 thread)               & 2.89 & 0.58  & 17   \\
-        \textbf{IETI-DP (12 threads)}    & 2.48 & \textbf{0.11} & 17 \\
+        Direct Cholesky               & 0.13      & 0.47          & ---   \\
+        GMRES (no preconditioner)     & 0.13      & 4.85          & 397   \\
+        GMRES + Jacobi                & 0.13      & 2.58          & 280   \\
+        GMRES + symm. Gauss--Seidel   & 0.13      & 4.57          & 100   \\
+        CG (no preconditioner)        & 0.13      & 0.47          & 446   \\
+        CG + Jacobi                   & 0.13      & 0.46          & 319   \\
+        CG + symm. Gauss--Seidel      & 0.13      & 3.23          & 104   \\
+        Multigrid (standalone)        & 0.21      & 0.69          & 18    \\
+        IETI-DP (no prec, 1 thread)   & 2.89      & 1.54          & 64    \\
+        IETI-DP (no prec, 12 threads) & 2.48      & 0.26          & 64    \\
+        IETI-DP (1 thread)            & 2.89      & 0.58          & 17    \\
+        \textbf{IETI-DP (12 threads)} & 2.48      & \textbf{0.11} & 17    \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -918,9 +954,9 @@ All measurements are single-processor; the parallel advantage of IETI-DP
         \label{fig:yeti-iters-K}
     \end{subfigure}
     \caption{Yeti domain: solve time (left) and iteration count (right) as each
-    discretization parameter is varied around the reference case ($\npatch = 21$,
-    $p = 2$, $r = 2$). Dashed lines are the predicted asymptotic scalings, shown
-    as worst-case bounds whose constant and sharpness are not guaranteed.}
+        discretization parameter is varied around the reference case ($\npatch = 21$,
+        $p = 2$, $r = 2$). Dashed lines are the predicted asymptotic scalings, shown
+        as worst-case bounds whose constant and sharpness are not guaranteed.}
     \label{fig:yeti-sweeps}
 \end{figure}
 
@@ -986,17 +1022,17 @@ wherever $J_{\gmap}$ has full column rank. With $\alpha\equiv 1$, the model
 problem~\eqref{eq:poisson-strong} becomes the Laplace--Beltrami equation
 $-\Delta_{\mathcal M}u=f$, where
 $\Delta_{\mathcal M}u=\tfrac{1}{\sqrt{\det G}}\,
-\widehat\nabla\!\cdot\!\bigl(\sqrt{\det G}\,G^{-1}\widehat\nabla\widehat u\bigr)$
+    \widehat\nabla\!\cdot\!\bigl(\sqrt{\det G}\,G^{-1}\widehat\nabla\widehat u\bigr)$
 and $\widehat u=u\circ\gmap$. Its weak form uses the tangential (surface)
 gradient $\nabla_{\mathcal M}u=(J_{\gmap}^{\dagger})^{\top}\widehat\nabla\widehat u
-\in T_{x}\mathcal M$, with $J_{\gmap}^{\dagger}=(J_{\gmap}^{\top}J_{\gmap})^{-1}
-J_{\gmap}^{\top}=G^{-1}J_{\gmap}^{\top}$ the Moore--Penrose pseudo-inverse;
+    \in T_{x}\mathcal M$, with $J_{\gmap}^{\dagger}=(J_{\gmap}^{\top}J_{\gmap})^{-1}
+    J_{\gmap}^{\top}=G^{-1}J_{\gmap}^{\top}$ the Moore--Penrose pseudo-inverse;
 equivalently, pulling back to the parameter domain,
 \begin{equation}
-  a(u,v)=\int_{\mathcal M}\nabla_{\mathcal M}u\cdot\nabla_{\mathcal M}v\,\mathrm{d}S
-        =\int_{\refdom}\bigl(\widehat\nabla\widehat u\bigr)^{\top}\,G^{-1}\,
-         \bigl(\widehat\nabla\widehat v\bigr)\,\sqrt{\det G}\;\mathrm{d}\widehat x .
-  \label{eq:laplace-beltrami}
+    a(u,v)=\int_{\mathcal M}\nabla_{\mathcal M}u\cdot\nabla_{\mathcal M}v\,\mathrm{d}S
+    =\int_{\refdom}\bigl(\widehat\nabla\widehat u\bigr)^{\top}\,G^{-1}\,
+    \bigl(\widehat\nabla\widehat v\bigr)\,\sqrt{\det G}\;\mathrm{d}\widehat x .
+    \label{eq:laplace-beltrami}
 \end{equation}
 We follow the isogeometric surface-PDE framework
 of~\cite{dede2015isogeometric}; see also the surface finite-element analysis
@@ -1024,7 +1060,7 @@ accuracy.
         \label{fig:refcase-sol}
     \end{subfigure}
     \caption{Reference case (teapot surface, $32$ patches, $p = 2$, $r = 3$):
-    the multipatch discretization, the source term, and the IETI-DP solution.}
+        the multipatch discretization, the source term, and the IETI-DP solution.}
     \label{fig:refcase}
 \end{figure}
 
@@ -1042,39 +1078,38 @@ form~\eqref{eq:laplace-beltrami} on the curved teapot surface: multigrid
 stagnates (1000 iterations, no convergence), whereas IETI-DP remains robust
 ($0.0047\,$s, 26 iterations), $11\times$ faster than the next-best converging
 global-system solver (CG+Jacobi at $0.052\,$s).
-The IETI-DP setup cost of $0.095\,$s at $r = 4$ is amortized over approximately
-$2$ right-hand sides relative to CG+Jacobi (and $5$ relative to Direct
-Cholesky), making it the preferred solver in the multi-RHS regime.
+Thus the advantage is already present in the solve phase itself and does not
+depend on accounting for one-time setup costs.
 
 \begin{table}[t]
     \centering
     \caption{Teapot benchmark ($\npatch = 32$, $p = 2$): solver performance at
-    $r = 3$ ($N = 2\,502$) and $r = 4$ ($N = 9\,078$). Solve times are means over
-    10 runs; setup is measured once. Global solvers and IETI-DP (no prec) use
-    12 threads; timing for global solvers is unchanged with more threads.
-    IETI-DP iteration counts are CG steps on the Schur complement~\eqref{eq:ieti-schur},
-    not directly comparable to global-system counts. CG (no prec) at $r=4$ and
-    Multigrid at $r=4$ did not converge within the 1\,000-iteration limit.}
+        $r = 3$ ($N = 2\,502$) and $r = 4$ ($N = 9\,078$). Solve times are means over
+        10 runs and exclude all setup. Global solvers and IETI-DP (no prec) use
+        12 threads; timing for global solvers is unchanged with more threads.
+        IETI-DP iteration counts are CG steps on the Schur complement~\eqref{eq:ieti-schur},
+        not directly comparable to global-system counts. CG (no prec) at $r=4$ and
+        Multigrid at $r=4$ did not converge within the 1\,000-iteration limit.}
     \label{tab:reference}
     \begin{tabular}{lcccccc}
         \toprule
-        & \multicolumn{3}{c}{$r = 3$,\; $N = 2\,502$}
-        & \multicolumn{3}{c}{$r = 4$,\; $N = 9\,078$} \\
+                                      & \multicolumn{3}{c}{$r = 3$,\; $N = 2\,502$}
+                                      & \multicolumn{3}{c}{$r = 4$,\; $N = 9\,078$}                                                                 \\
         \cmidrule(lr){2-4}\cmidrule(lr){5-7}
-        Method & setup [s] & solve [s] & iters & setup [s] & solve [s] & iters \\
+        Method                        & setup [s]                                   & solve [s]       & iters & setup [s] & solve [s]       & iters \\
         \midrule
-        Direct Cholesky              & 0.0081 & 0.0035 & ---  & 0.018 & 0.018  & ---  \\
-        CG (no prec)                 & 0.0081 & 0.011  & 344  & 0.018 & 0.11   & 1000 \\
-        CG + Jacobi                  & 0.0081 & 0.0094 & 207  & 0.018 & 0.052  & 381  \\
-        CG + symm.\ Gauss--Seidel    & 0.0081 & 0.032  & 90   & 0.018 & 0.16   & 144  \\
-        GMRES (no prec)              & 0.0081 & 0.097  & 224  & 0.018 & 1.30   & 452  \\
-        GMRES + Jacobi               & 0.0081 & 0.082  & 192  & 0.018 & 0.38   & 296  \\
-        GMRES + symm.\ Gauss--Seidel & 0.0081 & 0.031  & 80   & 0.018 & 0.22   & 134  \\
-        Multigrid (standalone)       & 0.011  & 0.015  & 35   & 0.026 & 1.99   & 1000 \\
-        IETI-DP (no prec, 1 thread)  & 0.034  & 0.0095 & 59   & 0.145 & 0.069  & 107  \\
-        IETI-DP (no prec, 12 threads)& 0.021  & 0.0017 & 57   & 0.095 & 0.012  & 108  \\
-        IETI-DP (1 thread)           & 0.034  & 0.0058 & 22   & 0.145 & 0.027  & 26   \\
-        \textbf{IETI-DP (12 threads)}& 0.021  & \textbf{0.0011} & 22 & 0.095 & \textbf{0.0047} & 26 \\
+        Direct Cholesky               & 0.0081                                      & 0.0035          & ---   & 0.018     & 0.018           & ---   \\
+        CG (no prec)                  & 0.0081                                      & 0.011           & 344   & 0.018     & 0.11            & 1000  \\
+        CG + Jacobi                   & 0.0081                                      & 0.0094          & 207   & 0.018     & 0.052           & 381   \\
+        CG + symm.\ Gauss--Seidel     & 0.0081                                      & 0.032           & 90    & 0.018     & 0.16            & 144   \\
+        GMRES (no prec)               & 0.0081                                      & 0.097           & 224   & 0.018     & 1.30            & 452   \\
+        GMRES + Jacobi                & 0.0081                                      & 0.082           & 192   & 0.018     & 0.38            & 296   \\
+        GMRES + symm.\ Gauss--Seidel  & 0.0081                                      & 0.031           & 80    & 0.018     & 0.22            & 134   \\
+        Multigrid (standalone)        & 0.011                                       & 0.015           & 35    & 0.026     & 1.99            & 1000  \\
+        IETI-DP (no prec, 1 thread)   & 0.034                                       & 0.0095          & 59    & 0.145     & 0.069           & 107   \\
+        IETI-DP (no prec, 12 threads) & 0.021                                       & 0.0017          & 57    & 0.095     & 0.012           & 108   \\
+        IETI-DP (1 thread)            & 0.034                                       & 0.0058          & 22    & 0.145     & 0.027           & 26    \\
+        \textbf{IETI-DP (12 threads)} & 0.021                                       & \textbf{0.0011} & 22    & 0.095     & \textbf{0.0047} & 26    \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1125,9 +1160,9 @@ per PCG iteration.
         \label{fig:teapot-iters-K}
     \end{subfigure}
     \caption{Teapot surface: solve time (left) and iteration count (right) as each
-    discretization parameter is varied around the reference case ($\npatch = 32$,
-    $p = 2$, $r = 2$). Dashed lines are the predicted asymptotic scalings, shown
-    as worst-case bounds whose constant and sharpness are not guaranteed.}
+        discretization parameter is varied around the reference case ($\npatch = 32$,
+        $p = 2$, $r = 2$). Dashed lines are the predicted asymptotic scalings, shown
+        as worst-case bounds whose constant and sharpness are not guaranteed.}
     \label{fig:teapot-sweeps}
 \end{figure}
 
@@ -1190,109 +1225,701 @@ remains far milder than that of the global Krylov solvers.
 \section{Neural Schur preconditioner: numerical comparison}
 \label{sec:nn-comparison}
 
-We now validate the neural Schur preconditioner $\Pneural$
-(Section~\ref{sec:neural-prec}) against the exact scaled Dirichlet
-preconditioner $\Psd$ and the unpreconditioned baseline, using the same
-IETI-DP solver (Algorithm~\ref{alg:ieti-dp}), the same yeti domain, the same
-discretization, boundary conditions, right-hand side, and stopping criterion
-(tolerance $10^{-8}$, maximum $1\,000$ iterations) for all three --- only the
-preconditioner applied inside the CG iteration on the interface
-problem~\eqref{eq:ieti-schur} changes.
-We use $p=2$, $r=2$ ($n_k=324$ basis functions per patch, $N=5\,760$ coupled
-dofs, $\Lambda=384$ Lagrange multipliers), the discretization the bundled
-model \texttt{YetiSchurTransformer} (Section~\ref{subsec:training}) was
-trained on, so that every patch's free-dof and skeleton-dof counts fall
-within the model's declared maxima ($n_k\le 304$, $|\skel_k|\le 48$) with no
-out-of-distribution padding.
-At this configuration no interior corner qualifies as a primal dof
-($n_\Pi=0$): every shared corner of the yeti domain also touches the
-Dirichlet boundary, so the primal/coarse component of IETI-DP is empty and
-the comparison isolates the effect of the local interface preconditioner
-alone.
+We compare $\Pneural$ with scaled Dirichlet $\Psd$ and no preconditioner using
+local spectra, global PCG convergence, and solve time; action loss alone is
+insufficient~\cite{wu2026dlhim}.
 
-Table~\ref{tab:nn-comparison} reports setup and solve times and iteration
-counts. The standard and unpreconditioned variants are measured with
-\texttt{solver\_benchmark\_example} (setup measured once, solve time the
-mean over 5 repeated solves within one process); the neural variant is
-measured with \texttt{ieti\_nn\_example} over 5 independent process runs
-(mean $\pm$ population standard deviation), since each run reloads the ONNX
-Runtime session and model weights.
+\subsection{Spectral and timing acceptance criteria}
 
-\begin{table}
+For a patch on which $\Sloc{k}$ is positive definite, define
+\begin{equation}
+    \delta_{F,k}=\frac{\|M_{\theta,k}-\Sloc{k}\|_F}{\|\Sloc{k}\|_F},\qquad
+    c_k=\lambda_{\min}\!\left(\Sloc{k}^{-1/2}M_{\theta,k}\Sloc{k}^{-1/2}\right),
+    \quad
+    C_k=\lambda_{\max}\!\left(\Sloc{k}^{-1/2}M_{\theta,k}\Sloc{k}^{-1/2}\right).
+    \label{eq:nn-local-diagnostics}
+\end{equation}
+For a floating patch the same definition is made on the positive eigenspace
+of $\Sloc{k}$.  If $c=\min_k c_k>0$ and $C=\max_k C_k$, congruence with the
+scaled jump operators in~\eqref{eq:scaled-dirichlet} gives
+\begin{equation}
+    c\Psd\preceq\Pneural\preceq C\Psd,
+    \qquad
+    \kappa(\Pneural\Fschur)
+    \leq \frac{C}{c}\,\kappa(\Psd\Fschur).
+    \label{eq:nn-global-bound}
+\end{equation}
+Thus extremal generalized eigenvalues, not the average Frobenius error alone,
+control the bound.
+
+For $X\in\{\mathrm{none},\mathrm{sD},\mathrm{NN}\}$, total solve time
+$T_{{\rm solve},X}$ contains the complete PCG iteration and excludes assembly,
+factorization, model loading, cache construction, and all other setup.  Every
+comparison also reports iterations.
+
+\subsection{Reproducible protocol}
+
+All methods share the same assembly, $\Fschur$, right-hand side, initial
+vector, stopping rule, and one unmeasured warm solve.  Standard cases use 40
+solves and 5,000 preconditioner applications; the reference uses 200 and
+20,000.  Lanczos estimates $\widehat\kappa$, and each run stores CSV data,
+convergence histories, logs, and a manifest.  Timings use one Ryzen 5 7600
+thread unless stated otherwise.  The neural model replaces only the local
+preconditioner action, not the common augmented solves in $\Fschur$.
+
+\subsection{In-distribution yeti benchmark}
+
+The training case is the 21-patch Yeti with $(p,r)=(2,2)$, $N=5\,760$, and
+$\Lambda=384$.  Patches have at most 304 free local and 48 skeleton degrees of
+freedom; the selected model uses $\dv=48$.
+
+\begin{table}[ht]
     \centering
-    \caption{Neural Schur preconditioner vs.\ the analytic scaled Dirichlet
-    preconditioner and the unpreconditioned baseline, IETI-DP CG on the
-    interface problem~\eqref{eq:ieti-schur} (yeti domain, $\npatch=21$,
-    $p=2$, $r=2$, $N=5\,760$, $\Lambda=384$, $n_\Pi=0$). Tolerance
-    $10^{-8}$, maximum $1\,000$ iterations; all three methods converged.
-    ``setup'' includes local patch assembly and, for the neural
-    preconditioner, the one-time ONNX session/model load; ``solve'' is the
-    CG loop on the Lagrange multipliers.}
+    \caption{Unified serial benchmark on the in-distribution yeti case.  Total
+        solve time excludes setup and is reported in milliseconds; application is
+        the cost of one preconditioner action in microseconds.  All methods converged
+        at tolerance $10^{-8}$.}
     \label{tab:nn-comparison}
-    \begin{tabular}{lcccc}
+    \small
+    \begin{tabular}{lrrrrr}
         \toprule
-        Method & setup [s] & solve [s] & iters & converged \\
+        Method                       & apply [$\mu$s] & $T_{\rm solve}$ [ms] & iters &
+        $\widehat\kappa$             & std. [ms]                                                    \\
         \midrule
-        IETI-DP (scaled Dirichlet, $\Psd$) & 0.132 & 0.0022 & 14 & yes \\
-        IETI-DP (no preconditioner)        & 0.132 & 0.0032 & 32 & yes \\
-        IETI-DP (neural, $\Pneural$)       & $0.062 \pm 0.002$ & $0.0031 \pm 0.0006$ & 27 & yes \\
+        None                         & 0.08           & 13.63                & 32    & 15.84 & 0.15 \\
+        Scaled Dirichlet $\Psd$      & 214.09         & 9.25                 & 14    & 2.79  & 0.12 \\
+        Neural $\Pneural$ ($\dv=48$) & 35.04          & 8.01                 & 17    & 4.28  & 0.10 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\emph{Iteration count.} $\Pneural$ converges in $27$ iterations, between the
-unpreconditioned $32$ and the exact $\Psd$'s $14$: the learned operator
-recovers a genuine, if imperfect, approximation to the local Schur
-complement's action, cutting the iteration count relative to no
-preconditioning by $16\%$ ($27$ vs.\ $32$) without matching the near-exact
-spectral equivalence of $\Psd$ (Section~\ref{subsec:theory}). All 5 neural
-runs reach the same iteration count (deterministic given the same seeded
-initial Lagrange multiplier), confirming the ONNX inference path is
-reproducible.
+Table~\ref{tab:nn-comparison} shows that the neural action is $6.11\times$
+cheaper than scaled Dirichlet.  Although it
+needs 17 rather than 14 iterations, its solve is $13.4\%$ faster
+($8.01$ vs.\ $9.25$ ms), excluding setup.
 
-\emph{Solve time.} With $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta$
-(Eq.~\eqref{eq:spd-param}) evaluated once per patch during setup and cached,
-every application of $\Pneural$ reduces to the two $O(|\skel_k|\dv)$
-matrix--vector products the formulation already implies
-(Section~\ref{subsec:architecture}), rather than a full Transformer forward
-pass per CG step. Consequently $\Pneural$'s solve time is only $1.4\times$
-that of $\Psd$'s ($0.0031\,$s vs.\ $0.0022\,$s), and is, within measurement
-noise, on par with the unpreconditioned baseline's ($0.0031\,$s vs.\
-$0.0032\,$s) despite converging in $27$ vs.\ $32$ iterations. Per CG step
-this is $\approx 0.11\,$ms for $\Pneural$, between $\Psd$'s $0.16\,$ms (one
-triangular back-solve against the precomputed factorization of $\Aaug{k}$,
-Remark~\ref{rmk:schur-cost}) and the unpreconditioned $0.10\,$ms (a single
-matrix--vector product) --- the learned operator's two small
-$O(|\skel_k|\dv)$ products are now \emph{cheaper} per application than an
-exact triangular solve of the $n_k$-dimensional local system.
+% With 12 threads, neural and scaled Dirichlet are indistinguishable
+% ($1.671\pm0.525$ vs.\ $1.715\pm0.433$ ms); larger systems are needed for a
+% parallel speedup claim.
 
-\emph{Setup time.} $\Pneural$'s setup remains cheaper than $\Psd$'s
-($0.062\,$s vs.\ $0.132\,$s, less than half), since it needs no per-patch
-factorization of $\Aaug{k}$: the one-time $O(K p\,n_k^{3/2})$ factorization
-cost (Remark~\ref{rmk:schur-cost}) is replaced by a fixed-cost model load
-plus, per patch, one forward pass that computes and caches
-$Q_\theta(\vect{\zeta}_k)$, $\varepsilon_\theta$ and cross-checks them
-against the network's own output. Summing setup and solve, $\Pneural$'s
-total wall time ($0.065\,$s) is now $\approx 2.1\times$ \emph{faster} than
-both $\Psd$ ($0.134\,$s) and the unpreconditioned variant ($0.135\,$s):
-caching turns the neural preconditioner from the slowest option overall into
-the fastest, without changing the underlying operator or its $27$-iteration
-convergence.
+Table~\ref{tab:nn-training-ablation} confirms that checkpoint selection must
+use solver diagnostics: sampled action loss is not a monotone proxy for the
+hardest PCG directions.
 
-\emph{Takeaway.} Caching $Q_\theta(\vect{\zeta}_k)$ and $\varepsilon_\theta$
-per patch --- exploiting that both depend only on the geometry descriptor
-$\vect{\zeta}_k$ and not on the probe vector $\vect{v}$
-(Eq.~\eqref{eq:matrix-form}) --- eliminates the repeated Transformer forward
-pass that dominated an earlier, uncached implementation, reducing every
-application of $\Pneural$ to the two $O(|\skel_k|\dv)$ matrix--vector
-products the formulation already implies. At this discretization the result
-is a preconditioner that is not merely competitive but \emph{strictly
-faster} in total wall time than both the exact scaled Dirichlet
-preconditioner and no preconditioning at all, while converging in fewer
-iterations than the unpreconditioned baseline. The remaining gap to $\Psd$
-is entirely in iteration count ($27$ vs.\ $14$), i.e.\ in how well
-$M_\theta(\vect{\zeta}_k)$ approximates the true local Schur complement
-spectrally (Section~\ref{subsec:theory}), not in the cost of applying it.
+\begin{table}[ht]
+    \centering
+    \caption{Checkpoint ablation on the same yeti system.  Total solve times
+        exclude setup.  The dataset split contains new probe rows, not new patch
+        geometries, so this is an in-distribution comparison.}
+    \label{tab:nn-training-ablation}
+    \begin{tabular}{lrrrr}
+        \toprule
+        Checkpoint            & $\dv$ & $T_{\rm solve}$ [ms] & PCG iters & $\widehat\kappa$ \\
+        \midrule
+        Original, 20 epochs   & 20    & 13.02                & 27        & 10.12            \\
+        Full rank, 100 epochs & 48    & 9.90                 & 20        & 5.86             \\
+        Full rank, 200 epochs & 48    & 10.14                & 19        & 5.02             \\
+        Full rank, 300 epochs & 48    & 8.01                 & 17        & 4.28             \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+% \subsection{Local spectral diagnostics}
+
+% Canonical actions materialize the matrices only for diagnostics.
+% Table~\ref{tab:nn-spectral} shows negligible symmetry error and positive neural
+% eigenvalues; the difficult extremal modes occur on the 48-entry patches.
+
+% \begin{table}[ht]
+%  \centering
+%  \caption{Per-patch diagnostics from~\eqref{eq:nn-local-diagnostics}; entries
+%  are grouped by active skeleton size.  Ranges are minima--maxima over patches.}
+%  \label{tab:nn-spectral}
+%  \begin{tabular}{rrrrr}
+%   \toprule
+%   $|\skel_k|$ & patches & mean $\delta_{F,k}$ & range $C_k/c_k$ & max. symmetry defect \\
+%   \midrule
+%   32 & 15 & 0.0161 & 1.070--1.196 & $2.02\cdot10^{-8}$ \\
+%   48 &  6 & 0.0543 & 5.351--7.175 & $2.34\cdot10^{-8}$ \\
+%   \bottomrule
+%  \end{tabular}
+% \end{table}
+
+\subsection{Tolerance stress test}
+
+Table~\ref{tab:nn-tolerance} preserves the ordering at every tolerance: neural
+needs three to four more iterations than scaled Dirichlet but has the lower
+mean solve time.  The $10^{-8}$ row uses 200 solves; the others use 40.
+
+\begin{table}[ht]
+    \centering
+    \caption{Tolerance sweep on the in-distribution case.  Each entry is total
+        solve time in milliseconds followed by PCG iterations; setup is excluded.}
+    \label{tab:nn-tolerance}
+    \begin{tabular}{rccc}
+        \toprule
+        Tolerance  & none          & scaled Dirichlet & neural       \\
+        \midrule
+        $10^{-4}$  & 8.62 ms / 20  & 5.43 ms / 8      & 5.36 ms / 11 \\
+        $10^{-6}$  & 10.67 ms / 25 & 7.30 ms / 11     & 7.13 ms / 15 \\
+        $10^{-8}$  & 13.63 ms / 32 & 9.25 ms / 14     & 8.01 ms / 17 \\
+        $10^{-10}$ & 16.52 ms / 39 & 10.44 ms / 16    & 9.30 ms / 20 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Changing degree and refinement: why the vanilla model fails}
+\label{subsec:nn-pr-transfer}
+
+On the 21-patch Yeti, $p$ denotes the local spline degree and $r$ the number
+of uniform refinements.  Subscripts $c$ and $f$ denote the trained coarse
+level $(p_c,r_c)=(2,2)$ and the requested fine level.  For patch $k$,
+$n_{c,k},n_{f,k}$ count free local basis functions and $s_{c,k},s_{f,k}$ count
+active skeleton degrees of freedom.  The ONNX capacities are 304 and 48,
+whereas $(p_f,r_f)=(2,3)$ needs up to 1,120 and 96.  The vanilla model is
+therefore dimensionally undefined, not merely inaccurate.
+
+To reuse it, let $x_i^f$ and $x_j^c$ be fine and coarse physical skeleton
+coordinates.  Row-normalized inverse-square interpolation from the four
+nearest $x_j^c$ defines $C_k\in\R^{s_{f,k}\times s_{c,k}}$.  Set
+\begin{equation}
+    P_k=C_k(C_k^\top C_k)^{-1/2},\qquad
+    \Pi_k=P_kP_k^\top,\qquad Q_k=I-\Pi_k,
+    \label{eq:nn-projector}
+\end{equation}
+so $P_k^\top P_k=I$.  Then $\Pi_k$ selects coarse-visible fine modes and $Q_k$
+the new modes introduced by refinement or degree elevation.
+
+With cached coarse neural matrix $M_{c,k}$ and
+$D^J_{f,k}=0.75\,\operatorname{diag}(A^f_{\Gamma\Gamma,k})$, where
+$A^f_{\Gamma\Gamma,k}$ is the fine skeleton stiffness block, define
+\begin{equation}
+    M^{\rm proj}_{f,k}=P_kM_{c,k}P_k^\top+Q_kD^J_{f,k}Q_k.
+    \label{eq:nn-projected-operator}
+\end{equation}
+The orthogonal terms preserve symmetry and positive definiteness without
+retraining.  Replacing $D^J_{f,k}$ by the learned $\epsilon_k I$ takes 51
+iterations versus 46 without preconditioning: new modes need a stiffness
+scale, not positivity alone.  Table~\ref{tab:nn-pr-transfer} and
+Figure~\ref{fig:nn-pr-transfer} show that projection helps throughout the
+sweep but loses ground as the unresolved fine space grows.
+
+\begin{table}[ht]
+    \centering
+    \caption{Yeti degree/refinement transfer at tolerance $10^{-8}$.  The neural
+        column uses the native model only at $(2,2)$ and
+        Eq.~\eqref{eq:nn-projected-operator} otherwise.  Each entry is total solve
+        time in seconds / PCG iterations; all setup is excluded.}
+    \label{tab:nn-pr-transfer}
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        $p_f$ & $r_f$ & projected neural & scaled Dirichlet & none         \\
+        \midrule
+        2     & 2     & 0.00883 / 17     & 0.00974 / 14     & 0.01459 / 32 \\
+        2     & 3     & 0.09182 / 32     & 0.07349 / 16     & 0.12385 / 46 \\
+        2     & 4     & 1.03438 / 42     & 0.58952 / 17     & 1.56487 / 64 \\
+        3     & 2     & 0.01473 / 22     & 0.01445 / 15     & 0.01927 / 32 \\
+        3     & 3     & 0.24903 / 35     & 0.17017 / 17     & 0.30990 / 44 \\
+        4     & 2     & 0.03074 / 36     & 0.02185 / 16     & 0.03221 / 42 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/discretization_transfer_20260716/figures/iterations_degree_refinement.pdf}
+        \caption{Iteration count over the $(p_f,r_f)$ sweep.}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/discretization_transfer_20260716/figures/timing_degree_refinement.pdf}
+        \caption{Total solve time; setup is excluded.}
+    \end{subfigure}
+    \caption{The projector consistently improves on no preconditioning, but its
+        gap to scaled Dirichlet widens as more modes lie outside the coarse range.}
+    \label{fig:nn-pr-transfer}
+\end{figure}
+
+\subsection{Projection versus training directly on the fine grid}
+\label{subsec:nn-fine-retraining}
+
+The alternative is direct fine-grid training.  The $(p,r)=(2,3)$ Yeti dataset
+has 4,032 patch--probe pairs: 1,536 canonical vectors $e_j$ (coordinate vector
+$j$), 1,248 independent standard-normal probes, and 1,248 Gaussian random
+field (GRF) probes.  At physical skeleton coordinates, a GRF probe $g$ has
+\begin{equation}
+    \operatorname{Cov}(g_i,g_j)
+    =\exp\!\left(-\frac{\|x_i-x_j\|^2}{2\ell_f^2}\right),
+    \qquad \ell_f=0.08,
+    \label{eq:nn-fine-grf}
+\end{equation}
+Every random probe is Euclidean-normalized.  The new capacities are
+$(N_{\max},S_{\max},\dv)=(1120,96,96)$; one epoch is one pass over the rows.
+Table~\ref{tab:nn-fine-retraining} and Figure~\ref{fig:nn-retraining} compare
+this model with projection: retraining wins after 165 epochs, but scaled
+Dirichlet still converges in fewer iterations.
+
+\begin{table}[ht]
+    \centering
+    \caption{Two remedies on the Yeti $(p,r)=(2,3)$ system.  Total solve time
+        excludes dataset generation, training, model loading and every other setup
+        cost.  All runs use tolerance $10^{-8}$.}
+    \label{tab:nn-fine-retraining}
+    \begin{tabular}{lrr}
+        \toprule
+        Strategy                           & $T_{\rm solve}$ [s] & PCG iters   \\
+        \midrule
+        None                               & 0.12385             & 46          \\
+        Coarse model, epsilon complement   & 0.14286             & 51          \\
+        Coarse model, projector + Jacobi   & 0.09182             & 32          \\
+        Fine model, 15 epochs              & 0.11903             & 44          \\
+        Fine model, 65 epochs              & 0.10691             & 38          \\
+        Fine model, 165 epochs             & \textbf{0.07726}    & \textbf{28} \\
+        Fine model + Jacobi ($\beta=0.05$) & 0.07763             & 28          \\
+        Scaled Dirichlet                   & 0.07349             & 16          \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/discretization_transfer_20260716/figures/retraining_vs_projection_p2_r3.pdf}
+        \caption{Iteration comparison.}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/discretization_transfer_20260716/figures/retraining_convergence_p2_r3.pdf}
+        \caption{Relative-residual histories.}
+    \end{subfigure}
+    \caption{Retraining eventually outperforms projection, while projection gives
+        an immediate improvement without generating fine-grid labels.  The exact
+        scaled-Dirichlet operator remains the accuracy target.}
+    \label{fig:nn-retraining}
+\end{figure}
+
+Figure~\ref{fig:nn-fine-pr-transfer} repeats the degree/refinement study of
+Figure~\ref{fig:nn-pr-transfer} with the \emph{fine model}, namely the
+165-epoch checkpoint trained at $(p,r)=(2,3)$.  It is applied natively only at
+that training point; the other cases use the same inverse-distance projector
+and Jacobi complement as~\eqref{eq:nn-projected-operator}.  The sweep is shifted
+by one refinement level to preserve the same relative changes in $p$ and $r$.
+
+The fine model remains useful but not refinement robust.  It is faster than no
+preconditioner in all six cases, and at $(2,5)$ reduces 90 iterations to 59 and
+solve time from $13.52$ to $8.97$ seconds.  Scaled Dirichlet needs only 18
+iterations and $3.75$ seconds there.  On the two cases shared with
+Figure~\ref{fig:nn-pr-transfer}, changing the training level changes 35 to 30
+iterations at $(3,3)$ but 42 to 46 at $(2,4)$.  Hence a finer checkpoint does
+not monotonically improve projection; modes outside its range still require a
+more accurate fine-space treatment.
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/fine_discretization_transfer_20260717/figures/fine_iterations_degree_refinement.pdf}
+        \caption{Iteration count over the fine-model sweep.}
+    \end{subfigure}\hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/fine_discretization_transfer_20260717/figures/fine_timing_degree_refinement.pdf}
+        \caption{Solve and application times on logarithmic scales.}
+    \end{subfigure}
+    \caption{Yeti transfer from the model trained at $(p,r)=(2,3)$.  The native
+        case is $(2,3)$; all others use projection plus the Jacobi complement.
+        Iterations use tolerance $10^{-8}$.  Times are means of five runs on one CPU
+        thread and include the complete PCG solve but exclude all setup.}
+    \label{fig:nn-fine-pr-transfer}
+\end{figure}
+\FloatBarrier
+
+\subsection{Does a Yeti dataset generalise to other geometries?}
+\label{subsec:nn-geometry}
+
+A row-wise Yeti split tests new actions on known local matrices, not new
+geometries.  We therefore apply the Yeti-only model without retraining to the
+planar lake, square and L-domain and to the curved teapot.  In
+Table~\ref{tab:nn-geometry}, $K$ is the patch count after optional splitting;
+all cases use $(p,r)=(2,2)$, coefficient $\alpha=1$, Dirichlet conditions,
+corner primals and relative tolerance $10^{-8}$.
+
+The model does not generalize reliably: it needs 59 versus 25 iterations on
+the 16-patch lake and 115 versus 37 on the teapot.  Thus the 17-step Yeti
+result is geometry-specific.
+
+\subsection{Geometry-diverse data and explicit padding masks}
+\label{subsec:nn-diverse-data}
+
+\paragraph{Geometries.}
+All data use $(p,r)=(2,2)$, coefficient $\alpha=1$ and homogeneous Dirichlet
+conditions.  The eight configurations are the 21-patch Yeti with its physical
+$x$ coordinate multiplied by $0.5$, $1$ or $2$; the lake and square after one
+or two uniform patch splits, giving $K=4$ or $16$; and the native $K=32$
+teapot surface.  The L-domain is never passed to the generator.  It is therefore
+an excluded geometry family, whereas a scaled Yeti is only a deformation of a
+known family.
+
+% \paragraph{One row of data.}
+% For each patch $k$, the generator assembles the local stiffness matrix and its
+% exact Schur complement $\Sloc{k}$ from~\eqref{eq:local-schur}.  A row contains
+% the geometry descriptor, a probe $\vect v\in\R^{s_k}$ and its exact label
+% $\Sloc{k}\vect v$, where $s_k$ is the number of active skeleton degrees of
+% freedom.  Geometry token $i$ is $(x_i,y_i,z_i,w_i)$: the physical Greville
+% coordinate and NURBS weight of free local basis function $i$; $z_i=0$ for the
+% planar domains.  Metadata record the configuration, patch, probe family,
+% number of free local functions and $s_k$.
+
+% Every patch contributes exactly 96 rows.  Its first $s_k$ probes are the
+% canonical vectors $\vect e_1,\ldots,\vect e_{s_k}$, so all columns of
+% $\Sloc{k}$ are represented.  The remaining $96-s_k$ rows alternate between
+% independent standard-normal probes and Gaussian-random-field (GRF) probes.  At
+% physical skeleton points $\vect x_i$, the GRF covariance is
+% $\operatorname{Cov}(v_i,v_j)=\exp(-\|\vect x_i-\vect x_j\|/0.08)$, with unit
+% marginal variance and diagonal jitter $10^{-10}$.  Every probe is normalized
+% to unit Euclidean norm before its label is computed.  Over all 135 patch
+% instances this gives 12,960 rows: 3,376 canonical, 4,800 GRF and 4,784
+% independent probes.  Thus sampling is uniform per patch, not per geometry
+% configuration; configurations with more patches contribute more rows.
+
+% \paragraph{Padding and data splits.}
+% The geometry, probe and label are zero-padded to 304 geometry tokens and 48
+% skeleton entries.  Since every physical NURBS weight is positive, $w_i=0$
+% identifies a padded token.  The mask $m_i=\mathbf 1_{\{w_i=0\}}$ removes such
+% tokens from Transformer self- and cross-attention; this matters for teapot
+% patches with only 30--36 free tokens and 14--20 skeleton entries.
+
+% A deterministic row permutation with seed zero is divided into 11,000
+% training, 960 validation and 1,000 test rows.  This split is not stratified by
+% geometry, and all 135 patch instances occur in all three subsets.  Consequently,
+% the reported test loss measures unseen probes $\vect v$ on known matrices
+% $\Sloc{k}$; it is not a geometry-generalization test.  Geometry transfer is
+% assessed separately by the $K=3$ and $K=12$ L-domain solver rows in
+% Table~\ref{tab:nn-geometry}, whose complete family is absent from dataset
+% generation, training, validation and row-wise testing.
+
+\begin{table}[ht]
+    \centering
+    \caption{Geometry study at $(p,r)=(2,2)$ and tolerance $10^{-8}$.  Every
+        entry is total solve time in milliseconds / PCG iterations; setup is excluded.
+        ``Diverse'' is trained on all listed geometries except the L-domain.}
+    \label{tab:nn-geometry}
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Geometry                    & none        & Yeti-only neural & diverse neural & scaled Dirichlet \\
+        \midrule
+        Yeti, $K=21$                & 13.741 / 32 & 9.815 / 17       & 11.554 / 25    & 9.237 / 14       \\
+        Lake, $K=4$                 & 0.051 / 13  & 0.134 / 20       & 0.048 / 7      & 0.039 / 6        \\
+        Lake, $K=16$                & 0.494 / 25  & 2.046 / 59       & 0.568 / 16     & 0.438 / 14       \\
+        Square, $K=4$               & 0.047 / 12  & 0.125 / 19       & 0.049 / 7      & 0.027 / 4        \\
+        Square, $K=16$              & 0.419 / 21  & 2.005 / 58       & 0.494 / 14     & 0.376 / 12       \\
+        L-domain, $K=3$ (held out)  & 0.021 / 8   & 0.042 / 9        & 0.038 / 8      & 0.022 / 5        \\
+        L-domain, $K=12$ (held out) & 0.250 / 19  & 0.994 / 44       & 0.450 / 20     & 0.232 / 11       \\
+        Teapot, $K=32$              & 1.945 / 37  & 11.070 / 115     & 1.972 / 20     & 1.689 / 19       \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+On the teapot, diverse training reduces 115 iterations to 20 and
+$\widehat\kappa$ from 517.50 to 5.92, close to scaled Dirichlet (19 and 5.72);
+lake and square behave similarly.  The architecture therefore represents
+several geometries when training exposes them.
+
+Starting from the diverse weights, we fine-tune on the teapot for 100 epochs
+at $5\cdot10^{-4}$ and 300 at $10^{-4}$.  The action loss decreases, but PCG
+remains at 20 iterations.  The positive-definite blend
+$(1-\beta)M_{\theta,k}+0.75\beta\operatorname{diag}(A_{\Gamma\Gamma,k})$ for
+$\beta\in\{0.02,0.05,0.1,0.2,0.35,0.5,0.75\}$ also worsens the count to
+21--36.  This plateau motivates the spectral probes below.
+
+\begin{table}[ht]
+    \centering
+    \caption{Teapot optimisation attempts at $(p,r)=(2,2)$.  Total solve time
+        excludes setup.  Fine-tuning does not improve the Krylov count even though it
+        reduces the sampled training objective.}
+    \label{tab:nn-teapot-tuning}
+    \begin{tabular}{lrrr}
+        \toprule
+        Method                             & $T_{\rm solve}$ [ms] & PCG iters   & $\widehat\kappa$ \\
+        \midrule
+        None                               & 1.945                & 37          & 23.29            \\
+        Yeti-only neural                   & 11.070               & 115         & 517.50           \\
+        Geometry-diverse neural            & 1.972                & 20          & 5.92             \\
+        Teapot fine-tune, 100 epochs       & 1.975                & 20          & 5.75             \\
+        Teapot fine-tune, 400 epochs total & 1.970                & 20          & 5.76             \\
+        Scaled Dirichlet                   & \textbf{2.689}       & \textbf{19} & \textbf{5.72}    \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+On the held-out 12-patch L-domain, diverse training improves $44\to20$
+iterations but not the unpreconditioned 19.  It improves robustness, not yet
+beneficial zero-shot transfer; that claim needs several excluded families.
+Figure~\ref{fig:nn-geometry} summarizes this geometry dependence and the
+corresponding residual histories.
+
+% \begin{figure}[ht]
+%  \centering
+%  \begin{subfigure}[b]{0.98\textwidth}
+%   \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_solver_comparison.pdf}
+%   \caption{Iterations and total solve time across geometries.}
+%  \end{subfigure}
+%  \par\medskip
+%  \begin{subfigure}[b]{0.82\textwidth}
+%   \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_convergence_histories.pdf}
+%   \caption{Held-out L-domain and teapot convergence.}
+%  \end{subfigure}
+%  \caption{Geometry comparison.  The logarithmic vertical scales expose both
+%  small planar solves and the severe Yeti-only failure on the teapot.}
+%  \label{fig:nn-geometry}
+% \end{figure}
+
+% \subsection{Active spectral probes: training on what the model gets wrong}
+% \label{subsec:nn-active-spectral}
+
+% Random probes measure typical action error, whereas a few directions with
+% large multiplicative error can govern PCG.  We therefore train on spectral
+% directions selected by the current model.
+
+% For teapot patch $k$, existing canonical labels $\Sloc{k}\vect e_j$
+% reconstruct $\Sloc{k}$.  We solve
+% \begin{equation}
+%  \Sloc{k}\vect v_{k,j}=\mu_{k,j}M_{\theta,k}\vect v_{k,j}
+%  \label{eq:nn-active-local-eigenproblem}
+% \end{equation}
+% and rank positive eigenvalues by $|\log\mu_{k,j}|$, a symmetric multiplicative
+% error measure.  Round 1 mixes the eight worst vectors into 32 normalized
+% probes per patch, adding 1,024 exact-action rows to 3,072 original rows, then
+% trains the 400-epoch checkpoint for 150 epochs at $5\cdot10^{-5}$.
+
+% The positive local spectrum contracts from $[0.9835,1.085]$ to
+% $[0.9928,1.010]$.  Round 2 uses 12 modes, 48 mixtures per patch and 100 epochs
+% at $2\cdot10^{-5}$; it lowers loss but not the PCG counts in
+% Table~\ref{tab:nn-teapot-active}.  The remaining defect is therefore not a
+% missing local direction.
+
+% \subsection{The remaining error is global: an adaptive spectral coarse space}
+% \label{subsec:nn-global-correction}
+
+% PCG sees the assembled interface equation $\Fschur\lagmult=\gschur$, not
+% isolated patches.  We therefore correct its few poorly scaled global modes.
+
+% Let $\mathcal P_0\in\R^{\Lambda\times\Lambda}$ denote the assembled symmetric
+% positive-semidefinite neural preconditioner before this correction, where
+% $\Lambda$ is the number of Lagrange multipliers.  On the positive interface
+% subspace, define the symmetric preconditioned operator
+% \begin{equation}
+%  H=\mathcal P_0^{1/2}\Fschur\mathcal P_0^{1/2},
+%  \qquad H\vect z_i=\lambda_i\vect z_i,
+%  \qquad \vect z_i^\top\vect z_j=\delta_{ij}.
+%  \label{eq:nn-global-spectrum}
+% \end{equation}
+% Zero eigenvalues caused by redundant multiplier representations are omitted.
+% Let $I_q$ contain the indices of the $q$ positive eigenvalues with largest
+% $|\log\lambda_i|$, let $Z_q$ collect their eigenvectors, and define
+% \begin{equation}
+%  W_q=\mathcal P_0^{1/2}Z_q,
+%  \qquad
+%  D_q=\operatorname{diag}_{i\in I_q}(\lambda_i^{-1}-1),
+%  \qquad
+%  \mathcal P_q=\mathcal P_0+W_qD_qW_q^\top.
+%  \label{eq:nn-global-correction}
+% \end{equation}
+% Here $q$ is the global correction rank.  Only its selected directions change;
+% for $\vect w_i=\mathcal P_0^{1/2}\vect z_i$,
+% $\mathcal P_q\Fschur\vect w_i=\vect w_i$.  Moreover,
+% \begin{equation}
+%  \mathcal P_q=\mathcal P_0^{1/2}
+%  \left[I+Z_qD_qZ_q^\top\right]\mathcal P_0^{1/2}
+%  \label{eq:nn-global-correction-spd}
+% \end{equation}
+% is positive semidefinite: the middle eigenvalues are $\lambda_i^{-1}>0$ on
+% the selected space and one elsewhere.  Standard PCG still applies, with two
+% thin products per action.
+
+% The full-spectrum construction materializes $\Fschur$ and diagonalizes $H$;
+% it is diagnostic, not scalable.  The randomized Ritz construction avoids
+% materializing $\Fschur$.  With oversampling $s$, random
+% $\Omega\in\R^{\Lambda\times(q+s)}$ and $m$ block-power steps, it forms
+% \begin{equation}
+%  Q_m=\operatorname{orth}(H^m\Omega),\qquad
+%  B_m=Q_m^\top H Q_m.
+%  \label{eq:nn-randomized-ritz}
+% \end{equation}
+% where $\operatorname{orth}(X)$ spans $X$ with orthonormal columns.  Eigenpairs
+% $(\widetilde\lambda_i,\vect y_i)$ of $B_m$ give
+% $\widetilde{\vect z}_i=Q_m\vect y_i$ for Eq.~\eqref{eq:nn-global-correction}.
+% Applications of $H$ use matrix-free $\Fschur$ actions; teapot parameters
+% $(q,s,m)=(32,16,4)$ require 240 during setup.
+
+% The prototype still forms $\mathcal P_0^{1/2}$ densely, so only its
+% $\Fschur$ applications are matrix-free.  All construction cost is excluded
+% from solve time.  The correction is reusable across right-hand sides for a
+% fixed geometry, discretization and coefficient.
+
+% \subsection{Teapot improvement and ablations}
+
+% Table~\ref{tab:nn-teapot-active} isolates the gains: fine-tuning stays at 20
+% steps, active probes match scaled Dirichlet at 19, and rank-32 Ritz reaches
+% 10 steps for $m=4$ and 9 for $m=6$.  Full-spectrum diagnostics reach 6 steps
+% at $q=40$ and 5 at $q=64$.  Times average 100 solves, include low-rank
+% products, and exclude setup; Figure~\ref{fig:nn-teapot-active-rank} shows the
+% full-spectrum rank trade-off.
+
+% \begin{table}[ht]
+%  \centering
+%  \caption{Teapot at $(p,r)=(2,2)$, $K=32$, $\Lambda=256$ and tolerance
+%  $10^{-8}$.  $q$ is the global correction rank and $m$ the randomized power
+%  count.  Time is total solve-only time; all setup is excluded.}
+%  \label{tab:nn-teapot-active}
+%  \small
+%  \begin{tabular}{lcrrr}
+%   \toprule
+%   Local model / global construction & $(q,m)$ & $T_{\rm solve}$ [ms] & iters & $\widehat\kappa$ \\
+%   \midrule
+%   None & -- & 1.916 & 37 & 23.29 \\
+%   Geometry-diverse & $(0,{-})$ & 1.766 & 20 & 5.92 \\
+%   Ordinary teapot fine-tune & $(0,{-})$ & 1.453 & 20 & 5.76 \\
+%   Active spectral, round 1 & $(0,{-})$ & 1.384 & 19 & 5.72 \\
+%   Active spectral, round 2 & $(0,{-})$ & 1.401 & 19 & 5.72 \\
+%   Active + randomized Ritz & $(32,4)$ & 0.775 & 10 & 1.69 \\
+%   Active + randomized Ritz & $(32,6)$ & 0.704 & 9 & 1.58 \\
+%   Active + full spectrum & $(32,{-})$ & 0.634 & 8 & 1.38 \\
+%   Active + full spectrum & $(40,{-})$ & 0.489 & 6 & 1.19 \\
+%   Active + full spectrum & $(64,{-})$ & \textbf{0.424} & \textbf{5} & \textbf{1.06} \\
+%   Scaled Dirichlet & -- & 1.390 & 19 & 5.72 \\
+%   \bottomrule
+%  \end{tabular}
+% \end{table}
+
+% \begin{figure}[ht]
+%  \centering
+%  \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_active_spectral_rank.pdf}
+%  \caption{Teapot rank convergence.  Active probes improve the uncorrected
+%  endpoint, while the interface-wide correction produces the large reduction
+%  in iterations, total solve time and condition estimate.  Dashed lines are
+%  scaled Dirichlet; all curves use the full-spectrum construction so that only
+%  the local checkpoint and rank vary.}
+%  \label{fig:nn-teapot-active-rank}
+% \end{figure}
+
+% Figure~\ref{fig:nn-teapot-ritz} shows that larger $m$ captures more important
+% modes and approaches the full-spectrum residual curve.  The correction cannot
+% rescue a poor local model: Yeti-only takes 102 teapot steps and still 50 after
+% rank-32 full-spectrum correction.  Diverse local training remains necessary.
+
+% \begin{figure}[ht]
+%  \centering
+%  \includegraphics[width=0.82\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_ritz_convergence.pdf}
+%  \caption{Teapot relative residual histories.  ``Active local only'' has
+%  $q=0$; the three randomized curves have $q=32$ and respectively 2, 4 and 6
+%  block-power steps.  The full-spectrum rank-32 curve is a diagnostic reference.}
+%  \label{fig:nn-teapot-ritz}
+% \end{figure}
+
+% \subsection{Refinement and geometry controls}
+
+% On Yeti $(p,r)=(2,2)$, correction reduces 17 iterations to 7 at $q=32$ and 6
+% at $q=40$, versus 14 for scaled Dirichlet.  At $(2,3)$, rank-96 Ritz improves
+% the fine model's 26 steps to 13 and beats scaled Dirichlet's 16; the
+% full-spectrum $q=256$ row halves its solve time.  The larger rank accompanies
+% the doubled interface size, $\Lambda=768$ versus 384.  Table~\ref{tab:nn-refined-correction}
+% reports the values and Figure~\ref{fig:nn-finegrid-correction} their rank trend.
+
+% \begin{table}[ht]
+%  \centering
+%  \caption{Yeti specialist and refined-grid controls at tolerance $10^{-8}$.
+%  Total solve time excludes setup.  ``Ritz $m$'' uses the randomized
+%  construction with $m$ power steps; ``full'' uses the full-spectrum reference.}
+%  \label{tab:nn-refined-correction}
+%  \small
+%  \begin{tabular}{cclrrr}
+%   \toprule
+%   $(p,r)$ & $\Lambda$ & method & $q$ & $T_{\rm solve}$ [ms] & iters \\
+%   \midrule
+%   $(2,2)$ & 384 & specialist neural & 0 & 7.822 & 17 \\
+%           &     & specialist + full & 16 & 4.400 & 9 \\
+%           &     & specialist + full & 32 & 3.517 & 7 \\
+%           &     & specialist + full & 40 & \textbf{3.034} & \textbf{6} \\
+%           &     & scaled Dirichlet & -- & 6.491 & 14 \\
+%           &     & none & -- & 13.746 & 32 \\
+%   \midrule
+%   $(2,3)$ & 768 & fine neural & 0 & 69.024 & 26 \\
+%           &     & fine + Ritz $m=4$ & 96 & 39.240 & 14 \\
+%           &     & fine + Ritz $m=6$ & 96 & 36.775 & 13 \\
+%           &     & fine + full & 96 & 41.722 & 15 \\
+%           &     & fine + full & 192 & 34.200 & 12 \\
+%           &     & fine + full & 256 & \textbf{21.706} & \textbf{7} \\
+%           &     & scaled Dirichlet & -- & 43.949 & 16 \\
+%           &     & none & -- & 116.019 & 46 \\
+%   \bottomrule
+%  \end{tabular}
+% \end{table}
+
+% \begin{figure}[ht]
+%  \centering
+%  \includegraphics[width=0.94\textwidth]{neural_results/adaptive_spectral_20260716/figures/finegrid_spectral_rank.pdf}
+%  \caption{Correction-rank convergence on the refined Yeti.  Diamonds are the
+%  rank-96 randomized Ritz constructions with 4 and 6 power steps; the line is
+%  the full-spectrum rank diagnostic.  Every point includes correction-application
+%  cost in the total solve time and excludes construction setup.}
+%  \label{fig:nn-finegrid-correction}
+% \end{figure}
+
+% Table~\ref{tab:nn-geometry-correction} rebuilds a full-spectrum rank-32 space
+% for each geometry.  It beats scaled Dirichlet in time and iterations in every
+% case, including the held-out L-domain and teapot, but is not zero-cost
+% transfer.  For the three smallest systems, $q=32$ spans the full positive
+% interface space, so one-step convergence is not a low-rank scalability result.
+% Figure~\ref{fig:nn-geometry-correction} displays the same cross-geometry trend.
+
+% \begin{table}[ht]
+%  \centering
+%  \caption{Geometry control at $(p,r)=(2,2)$.  Entries are total solve time in
+%  milliseconds / PCG iterations; setup is excluded.  ``Diverse+$q32$'' uses a
+%  geometry-specific full-spectrum rank-32 correction.}
+%  \label{tab:nn-geometry-correction}
+%  \small
+%  \begin{tabular}{lccc}
+%   \toprule
+%   Geometry & none & scaled Dirichlet & diverse + $q32$ \\
+%   \midrule
+%   Yeti, $K=21$ & 14.575 / 32 & 6.500 / 14 & \textbf{6.294 / 13} \\
+%   Lake, $K=4$ & 0.051 / 13 & 0.030 / 6 & \textbf{0.008 / 1} \\
+%   Lake, $K=16$ & 0.493 / 25 & 0.349 / 14 & \textbf{0.165 / 6} \\
+%   Square, $K=4$ & 0.047 / 12 & 0.021 / 4 & \textbf{0.008 / 1} \\
+%   Square, $K=16$ & 0.417 / 21 & 0.303 / 12 & \textbf{0.140 / 5} \\
+%   L-domain, $K=3$ (held out) & 0.021 / 8 & 0.017 / 5 & \textbf{0.006 / 1} \\
+%   L-domain, $K=12$ (held out) & 0.251 / 19 & 0.184 / 11 & \textbf{0.156 / 9} \\
+%   Teapot, $K=32$ & 1.923 / 37 & 1.384 / 19 & \textbf{0.704 / 9} \\
+%   \bottomrule
+%  \end{tabular}
+% \end{table}
+
+% \begin{figure}[ht]
+%  \centering
+%  \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/geometry_spectral_comparison.pdf}
+%  \caption{Iteration counts and total solve-only times across geometry families.
+%  The held-out label refers to absence from neural training; the rank-32 space
+%  itself is adapted to each assembled operator during setup.}
+%  \label{fig:nn-geometry-correction}
+% \end{figure}
+
+% \FloatBarrier
+
+% \subsection{What has and has not been achieved}
+
+% Active probes match scaled Dirichlet on the teapot at 19 iterations.  The
+% remaining error is interface-wide: rank-32 Ritz gives 9--10 iterations, while
+% the full-spectrum diagnostic reaches 5.  The correction also improves Yeti,
+% its $(2,3)$ discretization and the held-out planar family; on the fine grid,
+% rank-96 Ritz beats scaled Dirichlet in iterations and solve time.
+
+% The limits remain: full-spectrum rows use exact assembled information; Ritz
+% still forms $\mathcal P_0^{1/2}$ densely; all setup is excluded; only one
+% geometry family is fully held out; and $\alpha=1$ throughout.  Scalability
+% therefore requires matrix-free square-root actions, more held-out geometry and
+% coefficient families, and amortized setup studies.  Within solve-only timing,
+% the combined method improves both convergence and wall time.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
