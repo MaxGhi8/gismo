@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,11 @@ def train_iganet_transformer(
     epochs: int | None = None,
     batch_size: int | None = None,
     training_samples: int | None = None,
+    validation_samples: int | None = None,
+    test_samples: int | None = None,
+    auto_shapes: bool = False,
+    full_rank: bool = False,
+    checkpoint: str | Path | None = None,
 ) -> None:
     """Run the same fixed-model experiment as the original HyperNOs example."""
 
@@ -58,17 +64,51 @@ def train_iganet_transformer(
         config["batch_size"] = batch_size
     if training_samples is not None:
         config["training_samples"] = training_samples
+    if validation_samples is not None:
+        config["val_samples"] = validation_samples
+    if test_samples is not None:
+        config["test_samples"] = test_samples
 
-    for name in ("epochs", "batch_size", "training_samples"):
+    data_path = resolve_dataset_path(filename)
+    if auto_shapes:
+        with data_path.open(newline="", encoding="utf-8") as stream:
+            columns = next(csv.reader(stream))
+        n_geometry_values = sum(name.startswith("geom_") for name in columns)
+        n_dofs = sum(name.startswith("dirichlet_") for name in columns)
+        if n_geometry_values == 0 or n_geometry_values % 4 or n_dofs == 0:
+            raise ValueError(f"Cannot infer valid model shapes from {data_path}")
+        config["n_control_points"] = n_geometry_values // 4
+        config["n_dofs"] = n_dofs
+        if full_rank:
+            config["hidden_dim"] = n_dofs
+            requested_heads = int(config["n_heads"])
+            config["n_heads"] = next(
+                heads
+                for heads in range(min(requested_heads, n_dofs), 0, -1)
+                if n_dofs % heads == 0
+            )
+        print(
+            "Inferred dataset shapes: "
+            f"n_control_points={config['n_control_points']}, "
+            f"n_dofs={config['n_dofs']}, hidden_dim={config['hidden_dim']}"
+        )
+
+    positive_parameters = (
+        "epochs",
+        "batch_size",
+        "training_samples",
+        "val_samples",
+        "test_samples",
+    )
+    for name in positive_parameters:
         if config[name] <= 0:
             raise ValueError(f"{name} must be positive")
 
-    data_path = resolve_dataset_path(filename)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # train_fixed_model builds the dataset before the model.  Retaining that
     # object here lets the model reuse its fitted normalizers without reading
-    # the 277 MB CSV a second time.
+    # the wide CSV a second time.
     build_context: dict[str, YetiSchurTransformer] = {}
 
     def dataset_builder(current_config: dict[str, Any]) -> YetiSchurTransformer:
@@ -79,6 +119,9 @@ def train_iganet_transformer(
             training_samples=current_config["training_samples"],
             validation_samples=current_config["val_samples"],
             test_samples=current_config["test_samples"],
+            geometry_normalization=current_config.get(
+                "geometry_normalization", "pointwise"
+            ),
         )
         build_context["dataset"] = dataset
         return dataset
@@ -100,7 +143,7 @@ def train_iganet_transformer(
                 f"does not match the dataset geometry width {dataset.s_geo}"
             )
 
-        return GeometryConditionedLinearOperator(
+        model = GeometryConditionedLinearOperator(
             n_dofs=current_config["n_dofs"],
             n_control_points=current_config["n_control_points"],
             hidden_dim=current_config["hidden_dim"],
@@ -122,10 +165,30 @@ def train_iganet_transformer(
             ),
             device=device,
         )
+        if checkpoint is not None:
+            saved = torch.load(
+                Path(checkpoint).expanduser(), map_location=device, weights_only=True
+            )
+            model.load_state_dict(saved["state_dict"], strict=True)
+        return model
 
-    loss_name = "l2"
-    loss_fn = lpLoss(config["p"], True)
-    experiment_name = f"IgaNet_transformer/mp_afieti/loss_{loss_name}_mode_{config_mode}"
+    if bool(config.get("relative_loss", False)):
+        loss_name = "relative_l2"
+
+        def loss_fn(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+            numerator = torch.linalg.vector_norm(
+                prediction - target, ord=config["p"], dim=1
+            )
+            denominator = torch.linalg.vector_norm(target, ord=config["p"], dim=1)
+            return torch.mean(numerator / (denominator + 1.0e-8))
+
+    else:
+        loss_name = "l2"
+        loss_fn = lpLoss(config["p"], True)
+
+    experiment_name = (
+        f"IgaNet_transformer/mp_afieti/loss_{loss_name}_mode_{config_mode}"
+    )
 
     output_path = Path(output_folder).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
@@ -159,6 +222,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--training-samples", type=int, help="Override config training split size"
     )
+    parser.add_argument(
+        "--validation-samples", type=int, help="Override validation split size"
+    )
+    parser.add_argument("--test-samples", type=int, help="Override test split size")
+    parser.add_argument(
+        "--auto-shapes",
+        action="store_true",
+        help="Infer n_control_points and n_dofs from the CSV header",
+    )
+    parser.add_argument(
+        "--full-rank",
+        action="store_true",
+        help="With --auto-shapes, set hidden_dim equal to n_dofs",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="Continue from a saved .tar checkpoint (optimizer is restarted)",
+    )
     return parser.parse_args()
 
 
@@ -171,4 +253,9 @@ if __name__ == "__main__":
         epochs=arguments.epochs,
         batch_size=arguments.batch_size,
         training_samples=arguments.training_samples,
+        validation_samples=arguments.validation_samples,
+        test_samples=arguments.test_samples,
+        auto_shapes=arguments.auto_shapes,
+        full_rank=arguments.full_rank,
+        checkpoint=arguments.checkpoint,
     )
