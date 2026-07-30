@@ -15,6 +15,52 @@ def zero_mean_imposition(values: Tensor) -> Tensor:
     return values - values.mean(dim=1, keepdim=True)
 
 
+class PatchInvariantGeometryNormalizer(nn.Module):
+    """Remove irrelevant patch translation and uniform physical scale.
+
+    For the scalar two-dimensional Laplacian, translating a patch does not
+    alter its stiffness operator, and a uniform physical dilation cancels
+    between the Jacobian determinant and the two inverse Jacobians.  Encoding
+    absolute position and diameter therefore makes the learning problem harder,
+    especially after patch subdivision.  This normalizer centers the valid
+    physical control points, divides all spatial coordinates by one isotropic
+    RMS radius (so anisotropy is retained), and normalizes rational weights by
+    their valid-patch mean.  Zero-weight padding remains exactly zero.
+    """
+
+    def __init__(self, eps: float = 1.0e-6) -> None:
+        super().__init__()
+        self.register_buffer("eps", torch.tensor(eps, dtype=torch.float32))
+
+    def forward(self, values: Tensor) -> Tensor:
+        if values.ndim != 3 or values.shape[-1] != 4:
+            raise ValueError("Geometry must have shape (batch, points, 4)")
+
+        valid = values[..., 3:4].ne(0)
+        valid_float = valid.to(values.dtype)
+        count = valid_float.sum(dim=1, keepdim=True).clamp_min(1.0)
+
+        coordinates = values[..., :3]
+        centroid = (coordinates * valid_float).sum(dim=1, keepdim=True) / count
+        centered = (coordinates - centroid) * valid_float
+        radius = torch.sqrt(
+            centered.square().sum(dim=-1, keepdim=True).sum(
+                dim=1, keepdim=True
+            )
+            / count
+        ).clamp_min(self.eps.to(values.dtype))
+        normalized_coordinates = centered / radius
+
+        weights = values[..., 3:4]
+        mean_weight = (
+            weights.abs().sum(dim=1, keepdim=True) / count
+        ).clamp_min(self.eps.to(values.dtype))
+        normalized_weights = torch.where(
+            valid, weights / mean_weight, torch.zeros_like(weights)
+        )
+        return torch.cat((normalized_coordinates, normalized_weights), dim=-1)
+
+
 class PositionalEncoding(nn.Module):
     """Sinusoidal positional encoding for the control-point sequence."""
 
@@ -89,12 +135,18 @@ class GeometryEncoderResampler(nn.Module):
             if parameter.dim() > 1:
                 nn.init.xavier_uniform_(parameter)
 
-    def forward(self, geometry: Tensor) -> Tensor:
+    def forward(
+        self, geometry: Tensor, padding_mask: Tensor | None = None
+    ) -> Tensor:
         # Transformer modules in this model use (sequence, batch, feature).
         source = self.input_projection(geometry).permute(1, 0, 2)
-        memory = self.transformer_encoder(self.pos_encoder(source))
+        memory = self.transformer_encoder(
+            self.pos_encoder(source), src_key_padding_mask=padding_mask
+        )
         queries = self.target_queries.repeat(1, geometry.shape[0], 1)
-        latent_geometry, _ = self.resampling_attn(queries, memory, memory)
+        latent_geometry, _ = self.resampling_attn(
+            queries, memory, memory, key_padding_mask=padding_mask
+        )
         return latent_geometry.permute(1, 0, 2)
 
 
@@ -170,9 +222,9 @@ class GeometryConditionedLinearOperator(nn.Module):
         return F.softplus(self.raw_epsilon)
 
     def compute_operator_components(
-        self, geometry: Tensor
+        self, geometry: Tensor, padding_mask: Tensor | None = None
     ) -> tuple[Tensor, Tensor, Tensor]:
-        latent = self.geo_branch(geometry)
+        latent = self.geo_branch(geometry, padding_mask)
         query = torch.zeros_like(latent)
         key = torch.zeros_like(latent)
         for index in range(self.n_heads_A):
@@ -199,6 +251,9 @@ class GeometryConditionedLinearOperator(nn.Module):
 
     def forward(self, inputs: tuple[Tensor, Tensor] | list[Tensor]) -> Tensor:
         rhs, geometry = inputs
+        padding_mask = geometry[..., 3].eq(0)
         geometry = self.input_normalizer(geometry)
-        query, scaled_key, epsilon = self.compute_operator_components(geometry)
+        query, scaled_key, epsilon = self.compute_operator_components(
+            geometry, padding_mask
+        )
         return self.apply_operator(rhs, query, scaled_key, epsilon)

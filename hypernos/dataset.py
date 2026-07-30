@@ -17,6 +17,11 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset
 
+if __package__:
+    from .model import PatchInvariantGeometryNormalizer
+else:
+    from model import PatchInvariantGeometryNormalizer
+
 
 class UnitGaussianNormalizer(nn.Module):
     """Point-wise Gaussian normalization fitted along the sample dimension.
@@ -48,6 +53,39 @@ class UnitGaussianNormalizer(nn.Module):
 
     def forward(self, values: Tensor) -> Tensor:
         return self.encode(values)
+
+
+class MaskedChannelGaussianNormalizer(nn.Module):
+    """Normalize geometry features without assuming point-index alignment.
+
+    Multi-geometry datasets pad every patch to a common number of control
+    points.  A control point at array position ``i`` does not, in general,
+    represent the same geometric location in two unrelated patches.  We
+    therefore fit one mean and standard deviation per feature channel over all
+    *valid* control points.  Rows whose NURBS weight is zero are padding and
+    remain zero after normalization.
+    """
+
+    def __init__(self, values: Tensor, eps: float = 1.0e-5) -> None:
+        super().__init__()
+        if values.ndim != 3 or values.shape[-1] != 4:
+            raise ValueError("Geometry must have shape (samples, points, 4)")
+        valid = values[..., 3].ne(0)
+        samples = values[valid]
+        if samples.numel() == 0 or not torch.isfinite(samples).all():
+            raise ValueError("Cannot fit a channel normalizer to empty/non-finite data")
+        mean = samples.mean(dim=0, keepdim=True)
+        std = samples.std(dim=0, keepdim=True)
+        if not torch.isfinite(mean).all() or not torch.isfinite(std).all():
+            raise ValueError("The fitted channel statistics are not finite")
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
+        self.register_buffer("eps", torch.tensor(eps, dtype=values.dtype))
+
+    def forward(self, values: Tensor) -> Tensor:
+        valid = values[..., 3:4].ne(0)
+        encoded = (values - self.mean) / (self.std + self.eps)
+        return torch.where(valid, encoded, torch.zeros_like(encoded))
 
 
 class _YetiSchurTorchDataset(Dataset):
@@ -131,6 +169,7 @@ class YetiSchurTransformer:
         shuffle_seed: int = 0,
         num_workers: int = 0,
         pin_memory: bool = True,
+        geometry_normalization: str = "pointwise",
     ) -> None:
         if min(training_samples, validation_samples, test_samples) <= 0:
             raise ValueError("All split sizes must be positive")
@@ -190,7 +229,17 @@ class YetiSchurTransformer:
         rhs_test = rhs[validation_end:test_end]
         output_test = output[validation_end:test_end]
 
-        self.input_normalizer = UnitGaussianNormalizer(geometry_train)
+        if geometry_normalization == "pointwise":
+            self.input_normalizer = UnitGaussianNormalizer(geometry_train)
+        elif geometry_normalization == "channel":
+            self.input_normalizer = MaskedChannelGaussianNormalizer(geometry_train)
+        elif geometry_normalization == "patch":
+            self.input_normalizer = PatchInvariantGeometryNormalizer()
+        else:
+            raise ValueError(
+                "geometry_normalization must be pointwise, channel, or patch; got "
+                f"{geometry_normalization!r}"
+            )
         self.output_normalizer = UnitGaussianNormalizer(output_train)
 
         loader_options = {
