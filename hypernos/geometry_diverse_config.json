@@ -1,0 +1,29 @@
+{
+  "training_properties": {
+    "training_samples": 11000,
+    "val_samples": 960,
+    "test_samples": 1000,
+    "learning_rate": 0.001,
+    "epochs": 200,
+    "batch_size": 64,
+    "weight_decay": 0.0001,
+    "scheduler_step": 50,
+    "scheduler_gamma": 0.8,
+    "p": 2
+  },
+  "iganet_transformer_architecture": {
+    "problem_dim": 1,
+    "n_dofs": 48,
+    "n_control_points": 304,
+    "hidden_dim": 48,
+    "n_heads_A": 1,
+    "n_heads": 4,
+    "head_dim": 12,
+    "n_layers_geo": 3,
+    "dropout_rate": 0.0,
+    "activation_str": "gelu",
+    "zero_mean": false,
+    "internal_normalization": true,
+    "retrain": 23
+  }
+}
