@@ -113,6 +113,9 @@
 % Multiplicity scaling
 \newcommand{\Dmult}[1]{D_{#1}}                   % multiplicity-weighted diagonal
 
+% Free local degrees of freedom of patch k (skeleton + interior)
+\newcommand{\dofset}{\mathcal{N}}                % index set of free local dofs
+
 % Local and augmented solutions
 \newcommand{\uloc}[1]{\vect{u}_{#1}}             % local patch solution
 \newcommand{\uaug}[1]{\widetilde{\vect{u}}_{#1}} % augmented local solution (IETI)
@@ -202,8 +205,8 @@ basis functions $\bsuni{i}{p} : [0,1] \to \R$, $i = 1, \dots, m$:
     \frac{\eta - \xi_i}{\xi_{i+p} - \xi_i}\, \bsuni{i}{p-1}(\eta)
     + \frac{\xi_{i+p+1} - \eta}{\xi_{i+p+1} - \xi_{i+1}}\, \bsuni{i+1}{p-1}(\eta),
 \end{equation*}
-with the convention $0/0 = 0$; an interior knot of multiplicity $r$ yields
-$C^{p-r}$ continuity~\cite{cottrell2009isogeometric}. The constructed basis functions span the univariate
+with the convention $0/0 = 0$; an interior knot of multiplicity $\kappa$ yields
+$C^{p-\kappa}$ continuity~\cite{cottrell2009isogeometric}. The constructed basis functions span the univariate
 spline space $\Shat{p} := \spann\{\bsuni{i}{p}\}_{i=1}^{m}$.
 Multivariate B-splines are constructed with tensor products; on $\refdom := (0,1)^d$,
 with a degree $p_l$ and an open knot vector per direction $l = 1, \dots, d$, we
@@ -218,15 +221,29 @@ $\Omega = \gmap(\refdom)$ of a \emph{geometry map}
 $\gmap = \sum_{i=1}^{n} \vect{P}_i\, \Bref{i}{\vect{p}} \in
     [\Shat{\vect{p}}]^{D}$ with control points $\vect{P}_i \in \R^{D}$.
 We assume that the geometry map is invertible with full-rank Jacobian $J_{\gmap} = D\gmap$.
-For $D = d$ the domain is planar or volumetric; for $D > d$ it is a manifold (e.g.\ a
-surface in $\R^3$), on which physical gradients use the Moore--Penrose
-pseudo-inverse $J_{\gmap}^{\dagger} = (J_{\gmap}^{\top} J_{\gmap})^{-1}
-    J_{\gmap}^{\top}$ of the (full-column-rank, non-square) Jacobian, namely
-$\nabla_\Omega u=(J_{\gmap}^{\dagger})^\top\nabla_{\vect\eta}\widehat u$.{\color{green}{Check this}}
-% This is the left inverse appropriate to the tall matrix
-% $J_{\gmap}\in\R^{D\times d}$, $D>d$
-% (the right inverse $J_{\gmap}^{\top}(J_{\gmap}J_{\gmap}^{\top})^{-1}$ is undefined
-% here, since $J_{\gmap}J_{\gmap}^{\top}\in\R^{D\times D}$ has rank $d<D$).
+For $D = d$ the domain is planar or volumetric; for $D > d$ it is a manifold
+(e.g.\ a surface in $\R^3$) and $\nabla_\Omega$ denotes the tangential gradient,
+which takes values in the tangent space $\operatorname{range}(J_{\gmap})$.  Writing
+$\widehat u := u \circ \gmap$, the chain rule gives
+$\nabla_{\vect\eta}\widehat u = J_{\gmap}^{\top}\nabla_\Omega u$.  Because
+$\nabla_\Omega u \in \operatorname{range}(J_{\gmap})$, this relation determines
+$\nabla_\Omega u$ uniquely:
+\begin{equation}
+    \nabla_\Omega u
+    = J_{\gmap}\bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
+      \nabla_{\vect\eta}\widehat u
+    = \bigl(J_{\gmap}^{\dagger}\bigr)^{\top}\nabla_{\vect\eta}\widehat u,
+    \qquad
+    J_{\gmap}^{\dagger} := \bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
+        J_{\gmap}^{\top},
+    \label{eq:tangential-gradient}
+\end{equation}
+where $J_{\gmap}^{\dagger}$ is the Moore--Penrose \emph{left} inverse of the
+tall, full-column-rank matrix $J_{\gmap} \in \R^{D\times d}$; the right inverse
+$J_{\gmap}^{\top}(J_{\gmap}J_{\gmap}^{\top})^{-1}$ does not exist for $D>d$, since
+$J_{\gmap}J_{\gmap}^{\top}\in\R^{D\times D}$ has rank $d<D$.  For $D=d$,
+\eqref{eq:tangential-gradient} reduces to the familiar
+$\nabla_\Omega u = J_{\gmap}^{-\top}\nabla_{\vect\eta}\widehat u$.
 By the isoparametric paradigm~\cite{hughes2005isogeometric}, the isogeometric
 space on $\Omega$ is
 \begin{equation}
@@ -234,10 +251,21 @@ space on $\Omega$ is
     \gmap^{-1} \ \big|\ i = 1, \dots, n \bigr\}.
     \label{eq:isogeometric-space}
 \end{equation}
-{\color{green}{Manca la def di h}} NURBS are obtained by assigning weights $w_i > 0$ and replacing
+The subscript $h$ is the \emph{mesh size}: denoting by $\widehat{\mathcal{Q}}$ the
+partition of $\refdom$ into the (non-empty) knot-span elements induced by the
+knot vectors, we set
+\begin{equation}
+    h := \max_{\widehat{Q}\in\widehat{\mathcal{Q}}}
+    \operatorname{diam}\gmap(\widehat{Q}).
+    \label{eq:mesh-size}
+\end{equation}
+One uniform $h$-refinement step inserts the midpoint of every non-empty knot
+span in every direction, so $r$ such steps divide the parametric element size
+by $2^{r}$.  
+NURBS are obtained by assigning weights $w_i > 0$ and replacing
 $\Bref{i}{\vect{p}}$ with $\Rnurbs{i}{\vect{p}} = w_i
     \Bref{i}{\vect{p}} / \sum_{j=1}^n w_j \Bref{j}{\vect{p}}$ (B-splines
-being the case $w_i \equiv 1$); all that follows is unchanged.
+being the case $w_i \equiv 1$).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Model problem and multipatch discretization} \label{subsec:model}
@@ -250,23 +278,28 @@ $f \in L^2(\Omega)$ and boundary data $g_D, g_N$, we seek $u$ with
 \begin{equation}
     -\nabla \cdot (\alpha \nabla u) = f \ \text{ in } \Omega,
     \qquad u = g_D \ \text{ on } \Gamma_D,
-    \qquad \partial_n u = g_N \ \text{ on } \Gamma_N.
+    \qquad \alpha\, \partial_n u = g_N \ \text{ on } \Gamma_N,
     \label{eq:poisson-strong}
 \end{equation}
+where $\partial_n$ is the outward normal derivative.
 The weak form reads: find $u \in V_{g_D} := \{ v \in H^1(\Omega) : v_{|\Gamma_D}
     = g_D \}$ such that
 \begin{equation}
-    a(u, v) = F(v) \qquad \forall\, v \in V_0 := \{ v \in H^1(\Omega) :
-    v_{|\Gamma_D} = 0 \},
+    \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega = \int_{\Omega} f v \,\mathrm{d}\Omega + \int_{\Gamma_N} g_N v
+    \,\mathrm{d}s \qquad \forall\, v \in V_0 := \{ v \in H^1(\Omega) :
+    v_{|\Gamma_D} = 0 \}.
     \label{eq:weak-form}
 \end{equation}
-with $a(u, v) := \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega$
+We denote $a(u, v) := \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega$
 and $F(v) := \int_{\Omega} f v \,\mathrm{d}\Omega + \int_{\Gamma_N} g_N v
     \,\mathrm{d}s$. If $\Gamma_D = \emptyset$ (a closed surface, or pure Neumann
-data), $a(\cdot,\cdot)$ is only positive semidefinite, the problem is then solvable only under the compatibility condition
+data), $a(\cdot,\cdot)$ is only positive semidefinite: the constants lie in its
+kernel, the problem is solvable only under the compatibility condition
 $\int_\Omega f \,\mathrm{d}\Omega + \int_{\partial\Omega} g_N \,\mathrm{d}s = 0$,
-and its solution is unique up to a constant, for example by fixing the zero mean condition $\int_\Omega u
-    \,\mathrm{d}\Omega = 0$.
+and its solution is then unique only up to an additive constant, which can be
+fixed for instance by the zero-mean condition $\int_\Omega u
+    \,\mathrm{d}\Omega = 0$.  All experiments in this paper use
+$\Gamma_D \neq \emptyset$.
 
 We discretize on a non-overlapping multipatch decomposition into $\npatch$
 patches,
@@ -275,13 +308,34 @@ patches,
     \qquad \patchdom{k} \cap \patchdom{l} = \emptyset \ \text{ for } k,l = 1, \ldots, \npatch, \text{ and } k \neq l,
     \label{eq:multipatch}
 \end{equation}
-each the image $\patchdom{k} = \gmapk{k}(\refdom)$, $k = 1, \ldots, \npatch$, of its own geometry
-map, carrying a local isogeometric space $\Vloc{k}$ of dimension $n_k$ as
-in~\eqref{eq:isogeometric-space}. The patches are assumed \emph{fully
-    matching}~\cite{kleiss2012ieti}, adjacent patches share a complete edge/face with
-coinciding basis traces, so that the conforming global space $\Vglo :=
-    \{ v \in H^1(\Omega) : v_{|\patchdom{k}} \in \Vloc{k}, \ k=1, \ldots, \npatch \}$ is well defined. Given a
-basis $\{\Bphy{i}{\vect{p}}\}_{i=1}^{N}$ of $\Vglo$, after fixing the Dirichlet boundary conditions we define $N := \dim \Vglo$, and the
+each the image $\patchdom{k} = \gmapk{k}(\refdom)$, $k = 1, \ldots, \npatch$, of
+\emph{its own} geometry map $\gmapk{k}$.  Definition~\eqref{eq:isogeometric-space}
+is therefore applied patchwise: each patch carries its own reference space, with
+its own degrees $\vect{p}_k$ and knot vectors, and the local isogeometric space is
+\begin{equation}
+    \Vloc{k} := \spann\bigl\{ \Bloc{k}{i} := \Bref{i}{\vect{p}_k} \circ
+    \gmapk{k}^{-1} \ \big|\ i = 1, \dots, n_k \bigr\},
+    \label{eq:local-space}
+\end{equation}
+From Section~\ref{subsec:ieti} on,
+$\{\Bloc{k}{i}\}_{i=1}^{n_k}$ denotes this basis after strong elimination of the
+Dirichlet data on $\partial\patchdom{k} \cap \Gamma_D$.  Likewise, the mesh
+size~\eqref{eq:mesh-size} is defined patchwise, $h_k := \max_{\widehat{Q} \in
+    \widehat{\mathcal{Q}}_k} \operatorname{diam}\gmapk{k}(\widehat{Q})$, and
+globally as $h := \max_{k=1,\dots,\npatch} h_k$.
+
+The patches are assumed \emph{fully matching}~\cite{kleiss2012ieti}: two adjacent
+patches share a complete edge/face on which their parametrizations and the traces
+of their local bases coincide, so that the basis functions of the two patches
+meeting at the interface are in one-to-one correspondence.  Identifying each such
+pair gives the \emph{conforming} global space $\Vglo := \{ v \in H^1(\Omega) : v_{|\patchdom{k}} \in \Vloc{k},
+    \ k=1, \ldots, \npatch \}$.
+For $\npatch = 1$ this reduces to~\eqref{eq:isogeometric-space}.
+
+Dirichlet data are imposed strongly, so the trial and test spaces are the affine
+set $\Vglo \cap V_{g_D}$ and the subspace $\Vglo^0 := \Vglo \cap V_0$.  Setting
+$N := \dim \Vglo^0$ and fixing a basis $\{\Bphy{i}{\vect{p}}\}_{i=1}^{N}$ of
+$\Vglo^0$, the
 Galerkin discretization of~\eqref{eq:weak-form} is the following linear system
 \begin{equation}
     \Aglo\, \uglo = \fglo, \qquad
@@ -289,11 +343,11 @@ Galerkin discretization of~\eqref{eq:weak-form} is the following linear system
     \fglo_i = F(\Bphy{i}{\vect{p}}), \quad i, j = 1, \dots, N.
     \label{eq:global-system}
 \end{equation}
-The matrix $\Aglo$ is symmetric positive definite (SPD) when $\Gamma_D \neq \emptyset$, but $\Aglo$ becomes
+The matrix $\Aglo$ is symmetric positive definite (SPD) when $\Gamma_D \neq \emptyset$, but it becomes
 increasingly ill-conditioned under mesh refinement and
-degree elevation~\cite{gahalaut2019condition, sangalli2016isogeometric},
-then suitable preconditioners for Krylov
-methods need to be design~\cite{van2003iterative}.
+degree elevation~\cite{gahalaut2019condition, sangalli2016isogeometric}, so that
+suitable preconditioners for Krylov methods have to be
+designed~\cite{van2003iterative}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{The IETI-DP method} \label{subsec:ieti}
@@ -311,7 +365,7 @@ across patches \cite{kleiss2012ieti}. Only the coarse problem, of size $\nprim \
 primal dofs, requires global communication.
 
 \paragraph{Local problems and jump operator.}
-The discretization for IETI-DP method is define over the non-continuous
+The IETI-DP discretization is defined over the \emph{broken} (non-conforming)
 space $\Vprod := \prod_{k=1}^{\npatch}
     \Vloc{k} \supset \Vglo$. Each patch carries the local stiffness matrix and load vector
 \begin{equation}
@@ -322,7 +376,11 @@ space $\Vprod := \prod_{k=1}^{\npatch}
     \label{eq:local-stiffness}
 \end{equation}
 with $i, j = 1, \dots, n_k$ and $k=1, \ldots, \npatch$, where $\{\Bloc{k}{i}\}_{i=1}^{n_k}$ is the basis of
-$\Vloc{k}$. Thus $\Aloc{k} \in \R^{n_k \times n_k}$ are SPD matrices
+$\Vloc{k}$ after strong elimination of the Dirichlet data on
+$\partial\patchdom{k} \cap \Gamma_D$. Thus $\Aloc{k} \in \R^{n_k \times n_k}$ is
+symmetric positive semidefinite -- SPD exactly when
+$\partial\patchdom{k} \cap \Gamma_D \neq \emptyset$, and singular with the
+constants in its kernel otherwise (see the floating patches below) --
 and $\uloc{k} \in \R^{n_k}$ represents $u_k = \sum_i (\uloc{k})_i \Bloc{k}{i}$.
 Continuity across patch interfaces is enforced via Lagrange multipliers
 $\lagmult \in \R^{\Lambda}$. Introducing the signed Boolean \emph{jump matrices}
@@ -350,7 +408,7 @@ multiplier $\lagmult \in \R^{\Lambda}$, gives the saddle-point system
 
 \paragraph{Primal constraints and Schur complement.}
 The blocks $\Aloc{k}$ of floating patches ($\partial\patchdom{k} \cap \Gamma_D =
-    \emptyset$) are singular. The dual-primal approach remove the singularities selecting some \emph{primal}
+    \emptyset$) are singular. The dual-primal approach removes these singularities by selecting some \emph{primal}
 degrees of freedom (dof), usually corner values and/or interface averages, stacked as the
 rows of a constraint matrix $\Cloc{k} \in \R^{q_k \times n_k}$.
 This regularizes the local blocks and introduces a global
@@ -385,8 +443,8 @@ $\uaug{k}$ leaves an SPD system for the multipliers alone,
     \label{eq:ieti-schur}
 \end{equation}
 The system is solved by conjugate gradient (CG), and $\uglo$ is
-recovered from $\lagmult$ solving the coarse global problem \eqref{eq:augmented-blocks}
-and the addressing the local problems in parallel.
+recovered from $\lagmult$ by solving the coarse global problem in \eqref{eq:augmented-blocks}
+and then the local problems in parallel.
 
 \paragraph{Scaled Dirichlet preconditioner.}
 The system~\eqref{eq:ieti-schur} is large and ill-conditioned, so CG is
@@ -400,7 +458,7 @@ preconditioned by the scaled Dirichlet preconditioner~\cite{kleiss2012ieti,
 Here $\Jskel{k}$ is the restriction of $\Jloc{k}$ to the skeleton dofs $\skel_k$
 (interfaces and Neumann boundary, complementary to the interior $I_k$).
 The diagonal matrix $\Dmult{k}$ is the multiplicity scaling, with
-$(\Dmult{k})_{jj} = 1/\mathrm{mult}(j)$ where $\mathrm{mult}(j)$ counts the
+$(\Dmult{k})_{jj} = \mathrm{mult}(j)$, where $\mathrm{mult}(j)$ counts the
 number of patches sharing dof $j$.
 Finally, $\Sloc{k}$ is the local Dirichlet Schur complement of $\Aloc{k}$ onto
 the skeleton. Partitioning $\Aloc{k}$ into interior and skeleton blocks,
@@ -451,14 +509,18 @@ The overall method is summarized in Algorithm~\ref{alg:ieti-dp}.
 \end{algorithm}
 
 \begin{rmk}[Parallel structure and serial cost] \label{rmk:schur-cost}
-    Each preconditioned CG step applies $\Psd$ via $K$ local Schur-complement
-    solves (Eq.~\eqref{eq:local-schur}), each requiring one interior back-solve
-    with the precomputed factorization of $\Aaug{k}$.
-    These $K$ solves are mutually independent and constitute the dominant
+    Each preconditioned CG step applies $\Psd$ via $\npatch$ local
+    Schur-complement actions (Eq.~\eqref{eq:local-schur}), each requiring one
+    back-solve with the precomputed factorization of the \emph{interior} block
+    $A^{(k)}_{II}$; the factorization of the augmented block $\Aaug{k}$ is used
+    separately, in the applications of $\Fschur$ in~\eqref{eq:ieti-schur}.
+    These $\npatch$ actions are mutually independent and constitute the dominant
     per-iteration cost~\cite[\S4.5]{kleiss2012ieti}.
-    On a single processor: $O(K p\,n_k^{3/2})$ per CG step.
-    The ideal case is to have $K$ processors in order to have the
-    total cost independet from $K$, i.e. $O(p\,n_k^{3/2})$ per CG step.
+    For a banded local factorization of a $d=2$ tensor-product patch the
+    bandwidth is $O(p\,n_k^{1/2})$, so one back-solve costs $O(p\,n_k^{3/2})$ and
+    a serial CG step costs $O(\npatch\, p\,n_k^{3/2})$.
+    With $\npatch$ processors the per-step cost becomes independent of
+    $\npatch$, i.e.\ $O(p\,n_k^{3/2})$.
 \end{rmk}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -480,17 +542,19 @@ side~$\gschur$, or the requested residual tolerance.
 \subsection{Geometry-conditioned local Schur operator}
 \label{subsec:local-model}
 
-Let $\mathcal F_k$ {\color{green}{questo simbolo e' gia' utilizzato per le mappe locali}} be the local degrees of freedom that remain after strong
-elimination of Dirichlet data, $n_k^f=|\mathcal F_k|$, and
-$s_k=|\skel_k|$ the number of skeleton degrees of freedom on patch~$k$.
-For $i\in\mathcal F_k$, let $\vect\eta_i^{\rm Gr}$ be the corresponding
+Let $\dofset_k := \skel_k \cup I_k$ be the set of local degrees of freedom that
+remain after strong elimination of Dirichlet data (skeleton part $\skel_k$ and
+interior part $I_k$, as in Section~\ref{subsec:ieti}), and put
+$n_k^f=|\dofset_k|$ and $s_k=|\skel_k|$; the symbol $\gmapk{k}$ is reserved for
+the patch geometry maps.
+For $i\in\dofset_k$, let $\vect\eta_i^{\rm Gr}$ be the corresponding
 Greville abscissa and let
 $\overline{\vect x}_i=(\gmapk{k}(\vect\eta_i^{\rm Gr}),0_{3-D})\in\R^3$
 be its physical position padded to three coordinates.  We describe the patch by
 \begin{equation}
     \vect\zeta_k=
     \left\{\left(\overline{\vect x}_i,w_i\right)
-    \right\}_{i\in\mathcal F_k}\in\R^{n_k^f\times4},
+    \right\}_{i\in\dofset_k}\in\R^{n_k^f\times4},
     \label{eq:journal-geometry-descriptor}
 \end{equation}
 where $w_i$ is the NURBS weight and $D\le3$ is the embedding dimension.  Thus the
@@ -508,9 +572,11 @@ are therefore removed while anisotropy is retained.  This normalization is
 appropriate for the two-dimensional scalar Laplacian used here, for which a
 uniform physical dilation cancels between the Jacobian determinant and the two
 inverse Jacobian factors in the stiffness integral.
-The Transformer maps the padded descriptor to
-$Q_{\theta,k}\in\R^{S_{\max}\times d_v}$ and to a scalar
-$\varepsilon_\theta>0$.  Restriction to the active skeleton gives
+The Transformer~\cite{vaswani2017attention} maps the padded descriptor to
+$Q_{\theta,k}\in\R^{S_{\max}\times d_v}$, where $d_v$ is its latent width; the
+model carries in addition a single learned scalar
+$\varepsilon_\theta>0$, shared by all patches and independent of the geometry.
+Restriction to the active skeleton gives
 \begin{equation}
     M_{\theta,k}
     =R_k\left(
@@ -521,10 +587,14 @@ $\varepsilon_\theta>0$.  Restriction to the active skeleton gives
     M_{\theta,k}\vect v\approx\Sloc{k}\vect v,
     \label{eq:journal-local-spd}
 \end{equation}
-where $R_k$ removes padded skeleton entries and
-$\varepsilon_\theta=\operatorname{softplus}(\widehat\varepsilon_\theta)$.
+where $R_k=[\,I_{s_k}\ \ 0\,]$ removes the padded skeleton entries and
+$\varepsilon_\theta=\operatorname{softplus}(\widehat\varepsilon_\theta)$ for an
+unconstrained parameter $\widehat\varepsilon_\theta$.
 Equation~\eqref{eq:journal-local-spd} makes the learned map linear in
-$\vect v$, symmetric, and positive definite for every network output.  The
+$\vect v$, symmetric, and positive definite for every network output: the
+bracket is the sum of a positive semidefinite Gram matrix and
+$\varepsilon_\theta I$ with $\varepsilon_\theta>0$, and $R_k$ extracts a
+principal submatrix of it.  The
 Transformer is evaluated once per patch during setup.  PCG applications then
 can use the cached factors in $O(s_kd_v)$, without further neural inference;
 the controlled timings below instead use the common dense-local kernel
@@ -593,13 +663,15 @@ training, validation, and test sets.  Hence no canonical column of a
 validation or test operator occurs in training.
 
 Let $U_k\in\R^{s_k\times n_k^+}$ contain the Euclidean-orthonormal eigenvectors
-of the positive part of~$\Sloc{k}$ and let
-$D_k\in\R^{n_k^+\times n_k^+}$ contain the corresponding eigenvalues.
+of the positive part of~$\Sloc{k}$, where $n_k^+=\operatorname{rank}\Sloc{k}$, and
+let $\Sigma_k\in\R^{n_k^+\times n_k^+}$ be the diagonal matrix of the
+corresponding positive eigenvalues (the symbol $\Dmult{k}$ is reserved for the
+multiplicity scaling).
 For the learned matrix restricted to that subspace, define
 \[
     \{\nu_{k,j}\}_{j=1}^{n_k^+}
     =\operatorname{eig}\!\left[
-        (U_k^\top M_{\theta,k}U_k)^{-1}D_k
+        (U_k^\top M_{\theta,k}U_k)^{-1}\Sigma_k
         \right].
 \]
 The operator-level objective is
@@ -613,7 +685,9 @@ The operator-level objective is
 The first term controls average matrix error; the other two directly penalize
 the spectral-equivalence factors that determine PCG convergence.  The
 logarithm treats under- and over-estimation symmetrically.  This loss is used
-for the geometry-diverse teapot and subdivision models.  The original Yeti
+for the geometry-diverse teapot and subdivision models; the surface-diverse
+holdout model below uses the same objective with the two spectral weights
+doubled, $0.5$ and $0.1$.  The original Yeti
 specialists use the fixed 21 native patches and action losses on canonical,
 IID Gaussian, and correlated Gaussian probes; their held-out rows are new
 actions on known patches, not held-out geometries.
@@ -643,11 +717,16 @@ Section~\ref{subsec:geometry-generalization}.
 For the geometry-transfer experiment in
 Section~\ref{subsec:geometry-generalization}, we train a second
 $(p,r)=(2,2)$ model on 214 patch operators without using any teapot patch.
-The set contains the Yeti at three horizontal scales, the lake, the square,
-both tested L-domain decompositions, and four curved surface families:
-a cylinder, a quarter sphere, a free-form surface, and the Scordelis roof.
-The surface files are split into four or sixteen subpatches, and their
-four-patch versions also include coordinate scalings $0.75$ and $1.25$.
+The set contains the Yeti at three horizontal scales ($63$ patches), the
+four-patch lake and square ($8$), both tested L-domain decompositions
+($3+12$), and four curved surface families: a cylinder, a quarter sphere, a
+free-form surface, and the Scordelis roof.  Each surface family contributes
+five four-patch variants -- the unscaled one and the four obtained by scaling
+either physical coordinate by $0.75$ or $1.25$ -- for $4\times5\times4=80$
+patches, and three of them (all but the periodic cylinder, whose twice-split
+local trace factors are singular in the generator) are additionally split into
+sixteen patches, for $3\times16=48$ further patches.  This gives
+$63+8+15+80+48=214$ operators in total.
 The initial patch-grouped run selects epoch 784.  A deployment fine-tune then
 fits all 214 declared non-teapot operators for 400 lower-rate epochs.
 Consequently, its internal fit-all loss is not a held-out estimate; the
@@ -664,11 +743,12 @@ compute $\Fschur^{-1}$, or form a dense square root of~$P_0$.
 
 Let $q$ be the correction rank, $\ell_s\ge q$ the total sketch dimension,
 $m+1$ the requested Krylov depth, and
-$b=\min\{\ell_s,\max(4,\lceil\ell_s/(m+1)\rceil)\}$ the block width.  Here
-$\Lambda=\dim(\Fschur)$ is the number of Lagrange multipliers.  Draw
-$\Omega\in\R^{\Lambda\times b}$ and initialize the paired block
+$b=\min\{\ell_s,\max(4,\lceil\ell_s/(m+1)\rceil)\}$ the block width.  Recall that
+$\Fschur\in\R^{\Lambda\times\Lambda}$, i.e.\ $\Lambda$ is the number of Lagrange
+multipliers.  Draw a random $W_0\in\R^{\Lambda\times b}$ and initialize the paired
+block
 \begin{equation}
-    W_0=\Omega,\qquad Z_0=P_0W_0.
+    Z_0=P_0W_0 .
 \end{equation}
 The operator $A=P_0\Fschur$ is self-adjoint in the $P_0^{-1}$ inner product.
 Moreover, from a pair $Z_j=P_0W_j$ we can form the next pair using only
@@ -699,9 +779,10 @@ For a Ritz pair, set $y_i=Zc_i$, $w_i=Wc_i$, and
 \]
 The numerator is the residual norm associated with the
 $P_0^{-1}$-self-adjoint eigenproblem and is computable using one additional
-$P_0$ application.  We discard nonpositive numerical modes and candidates
-with $\eta_i>0.2$, then retain at most $q$ accepted values with largest
-$|\log\lambda_i|$.  With $Y=[y_1,\ldots,y_q]$ for the retained modes, the final
+$P_0$ application.  We discard numerically nonpositive modes (those with
+$\lambda_i$ below a relative threshold $\max\{10^{-8},10^{-4}\max_j|\lambda_j|\}$)
+and candidates with $\eta_i>0.2$, then retain at most $q$ accepted values with
+largest $|\log\lambda_i|$.  With $Y=[y_1,\ldots,y_q]$ for the retained modes, the final
 preconditioner is
 \begin{equation}
     P_q=P_0+Y\operatorname{diag}(\lambda_1^{-1}-1,\ldots,
@@ -723,9 +804,16 @@ preconditioner is
     replaces it by
     $Y\operatorname{diag}(\lambda_i^{-1})Y^\top$, which is positive definite
     because $\lambda_i>0$, and leaves the positive complementary block unchanged.
-    Moreover,
-    $P_q\Fschur y_i=\lambda_i y_i+(1-\lambda_i)y_i=y_i$.
+    Moreover, $\Fschur y_i=\lambda_iP_0^{-1}y_i$ gives $Y^\top\Fschur y_i=\lambda_ie_i$,
+    hence
+    $P_q\Fschur y_i=\lambda_i y_i+\lambda_i(\lambda_i^{-1}-1)y_i=y_i$.
 \end{proof}
+
+The normalization hypothesis is met by construction: the retained blocks satisfy
+$Z^\top W=Z^\top P_0^{-1}Z=I$ and the Ritz coefficient vectors $c_i$ are
+Euclidean-orthonormal, so $Y=Z[c_1,\ldots,c_q]$ obeys $Y^\top P_0^{-1}Y=I$.
+In the deterministic branch below the same holds with $y_i=P_0^{1/2}v_i$ for the
+Euclidean-orthonormal eigenvectors $v_i$ of $P_0^{1/2}\Fschur P_0^{1/2}$.
 
 For approximate Ritz vectors, positivity is preserved by accepting only
 positive Ritz values; the residual test controls approximation quality but
@@ -847,12 +935,17 @@ native grid is
     (p,r)\in\{(2,1),(1,2),(2,2),(3,2),(4,2),(2,3)\}.
     \label{eq:journal-pr-grid}
 \end{equation}
-The original Yeti specialists use three geometry encoder layers.  The operator-loss models
-use four encoder layers except at $(p,r)=(2,3)$, where two layers limit memory;
-their hidden widths range from 48 to 192.  They use AdamW, zero dropout,
+The original Yeti specialists use three geometry encoder layers, except at
+$(p,r)=(2,3)$, where two layers limit memory; they are trained on action losses
+with learning rate $10^{-3}$ and weight decay $10^{-4}$ for 300 epochs.  The
+operator-loss models of Section~\ref{subsec:native-data}
+use four encoder layers, again except at $(p,r)=(2,3)$, where two layers limit
+memory; their hidden widths range from 48 to 192.  These models use
+AdamW~\cite{loshchilov2019decoupledweightdecayregularization}, zero dropout,
 learning rate $3\times10^{-4}$ (or $5\times10^{-5}$ for balanced
 continuation), weight decay $10^{-5}$, cosine decay, gradient clipping, and
-early stopping.  The full architectures, seeds, split keys, model hashes, and
+early stopping.  The surface-diverse holdout model is wider and deeper
+(five encoder layers, hidden width 192).  The full architectures, seeds, split keys, model hashes, and
 commands are stored in the manifests.
 
 \begin{table}[t]
@@ -874,9 +967,10 @@ included in any $T_{\rm solve}$ value.
 \label{sec:yeti-results}
 
 Figure~\ref{fig:journal-geometries}(a) shows the fixed 21-patch Yeti geometry.
-For the degree and refinement studies, the specialist at each~$(p,r)$ is
-trained on these 21 native patches.  The patch-count study uses the declared
-1163-operator subdivision model because the fixed-21 model was found not to
+For the degree and refinement studies, and for the $K=21$ point of the
+patch-count study, the specialist at each~$(p,r)$ is trained on these 21 native
+patches.  The subdivided points $K=84$ and $K=336$ use the declared
+1163-operator subdivision model, because the fixed-21 model was found not to
 transfer reliably to child patches.
 
 \begin{figure}[t]
@@ -958,7 +1052,10 @@ The teapot in Figure~\ref{fig:journal-geometries}(b) is a 32-patch spline
 surface in~$\R^3$.  Its patch family is included in the geometry-diverse
 training distributions defined in Section~\ref{subsec:native-data}; the
 principal teapot study is therefore in distribution with respect to geometry
-family.  It tests solver behavior across discretizations and patch counts, not
+family.  Concretely, the $(p,r)=(2,2)$ teapot rows use the 1163-operator
+subdivision model, the $(2,1)$, $(2,3)$ and $(1,2)$ rows use the corresponding
+103-operator models, and the $(3,2)$ and $(4,2)$ rows use the 231-operator
+balanced models.  It tests solver behavior across discretizations and patch counts, not
 whole-family zero-shot transfer.
 
 \begin{table}[t]
@@ -1017,7 +1114,8 @@ IETI-DP on all six geometries.  Most importantly, on the unseen teapot it
 reduces the count from 19 to 12 and the solve time from $1.392$ to
 $0.979$ ms, a $1.42\times$ speedup.  On the five in-distribution geometries,
 the solve-time speedup ranges from $1.23\times$ on the square to
-$2.40\times$ on the 12-patch L-domain.
+$2.40\times$ on the 12-patch L-domain.  Figure~\ref{fig:journal-geometry-recovery}
+shows the same data as ratios to unmodified IETI-DP.
 
 This result supports whole-family transfer of the \emph{offline local model}
 to the tested teapot, not distribution-free geometric generalization.  The
@@ -1032,7 +1130,7 @@ identically enriched classical alternative.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.94\textwidth]
-    {../latex_experiments/neural_results/table_recovery_20260723/final_auto_cuda_50/figures/geometry_recovery_ratios.pdf}
+    {journal_results/figures/geometry_recovery_ratios.pdf}
     \caption{Geometry-recovery ratios relative to unmodified IETI-DP; values
         below one are better.  The teapot is absent from offline neural training.
         Both enriched methods use the same test-operator-dependent interface
@@ -1066,9 +1164,18 @@ steps on the teapot.
 
 Figure~\ref{fig:journal-rank-ablation} varies only the correction rank on the
 reference discretization.  Rank $q=0$ is the native neural preconditioner
-without an interface correction but retains local rank-four calibration; the
-remaining points use the same block-Krylov depth, half-space search, and
-residual test as the principal method.  Increasing $q$ can reduce iterations
+without an interface correction but retains the local calibration; the
+remaining points use the same block-Krylov depth ($m=10$) and the same
+residual test ($\eta_i\le0.2$) as the principal method.  Two development-stage
+settings differ from the frozen rule: the sketch dimension is
+$\ell_s=\min\{\Lambda,q+192\}$, without the $\lfloor\Lambda/2\rfloor$ cap, and the
+local calibration caps the per-patch rank at
+$\min\{4,\lceil0.125\,n_k^+\rceil,n_k^+\}$ instead of $\min\{4,n_k^+\}$.  The cap
+is inactive on the 21 Yeti patches, which all keep four calibrated modes, but on
+the smaller teapot skeletons it reduces the per-patch rank to two or three;
+the frozen method of Section~\ref{subsec:local-model} calibrates four modes on
+every patch of both reference problems.
+Increasing $q$ can reduce iterations
 but also adds two $\Lambda\times q$ products to every preconditioner
 application.
 
@@ -1167,8 +1274,9 @@ $p\in\{1,2,3,4\}$; patch scaling fixes $(p,r)=(2,2)$.  Every point reports
 both solve-only time and iterations for the requested methods.  Direct
 Cholesky appears only in the timing panel because it has no iteration count.
 In the patch-count sweeps, the Yeti model
-at $K=21$ is the fixed-patch specialist, while subdivided Yeti and teapot
-points use the declared 1163-operator subdivision model.  The patch-count
+at $K=21$ is the fixed-patch specialist, while the subdivided Yeti points and
+all three teapot points -- including the unsubdivided $K=32$ reference -- use
+the declared 1163-operator subdivision model.  The patch-count
 sweeps therefore test solver scaling inside that augmented training
 distribution; they do not test zero-shot transfer to child patches.
 
@@ -1178,8 +1286,11 @@ Across $r=1,2,3$ at $p=2$, neural IETI-DP uses 8, 9, and 9 iterations,
 compared with 12, 14, and 16 for classical IETI-DP.  At $r=2$ and
 $p=1,2,3,4$, the corresponding counts are 10, 9, 8, and 10 versus 13, 14,
 15, and 16.  At $K=21,84,336$, the neural counts are 9, 12, and 15 versus
-14, 19, and 21.  The narrowest Yeti time margin occurs at $K=336$:
-$54.177$ ms versus $69.192$ ms, a $1.28\times$ speedup.
+14, 19, and 21; see Figures~\ref{fig:journal-yeti-refinement},
+\ref{fig:journal-yeti-degree} and~\ref{fig:journal-yeti-patches}.
+The narrowest Yeti time margin occurs at $(p,r)=(1,2)$:
+$2.521$ ms versus $3.079$ ms, a $1.22\times$ speedup; the largest patch count
+$K=336$ is next, at $54.177$ ms versus $69.192$ ms, a $1.28\times$ speedup.
 
 \begin{figure}[p]
     \centering
@@ -1218,7 +1329,9 @@ $p=1,2,3,4$ are 7, 8, 17, and 17 versus 16, 19, 21, and 23.  The smallest
 time margin is the high-degree case $p=3$: $1.955$ ms versus $2.216$ ms,
 or $1.13\times$.  At $K=32,128,512$, the neural counts are 8, 10, and 22
 versus 19, 24, and 36, with solve-only speedups $2.02\times$,
-$2.16\times$, and $1.54\times$, respectively.
+$2.16\times$, and $1.54\times$, respectively; see
+Figures~\ref{fig:journal-teapot-refinement},
+\ref{fig:journal-teapot-degree} and~\ref{fig:journal-teapot-patches}.
 
 \begin{figure}[p]
     \centering
