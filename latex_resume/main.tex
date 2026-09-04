@@ -216,6 +216,32 @@ colexicographical reordering into a single index $i = 1, \dots, n$, with
 $n := \prod_{l=1}^{d} m_l$, gives the reference function space $\Shat{\vect{p}} :=
     \spann\{\Bref{i}{\vect{p}}\}_{i=1}^{n}$.
 
+Each basis function is canonically located at its \emph{Greville abscissa}, the
+average of the $p$ interior knots of its support,
+\begin{equation}
+    \gamma_i := \frac{1}{p} \sum_{j=i+1}^{i+p} \xi_j,
+    \qquad i = 1, \dots, m,
+    \label{eq:greville}
+\end{equation}
+so that $\gamma_i$ lies in the support of $\bsuni{i}{p}$, close to its maximum,
+and $0 = \gamma_1 < \dots < \gamma_m = 1$ whenever the interior knots have
+multiplicity at most $p$.  These points are not an arbitrary choice: they are the
+control points of the identity map,
+\begin{equation}
+    \sum_{i=1}^{m} \gamma_i\, \bsuni{i}{p}(\eta) = \eta
+    \qquad \forall\, \eta \in [0,1],
+    \label{eq:greville-identity}
+\end{equation}
+which identifies $\gamma_i$ as the parametric coordinate of the $i$-th degree of
+freedom, and the associated collocation matrix
+$\bigl[\bsuni{j}{p}(\gamma_i)\bigr]_{i,j=1}^{m}$ satisfies the
+Schoenberg--Whitney condition and is therefore
+nonsingular~\cite{de1978practical}.  In the tensor-product case, the Greville
+abscissa of $\Bref{i}{\vect{p}}$ with multi-index $\vect{i} = (i_1, \dots, i_d)$
+is $\vect\eta_i^{\rm Gr} := \bigl(\gamma_{i_1}^{(1)}, \dots,
+    \gamma_{i_d}^{(d)}\bigr) \in \refdom$, where $\gamma^{(l)}$
+denotes~\eqref{eq:greville} for direction $l$.
+
 The physical domain $\Omega \subset \R^{D}$ ($D \ge d$) is the image
 $\Omega = \gmap(\refdom)$ of a \emph{geometry map}
 $\gmap = \sum_{i=1}^{n} \vect{P}_i\, \Bref{i}{\vect{p}} \in
@@ -231,11 +257,11 @@ $\nabla_\Omega u$ uniquely:
 \begin{equation}
     \nabla_\Omega u
     = J_{\gmap}\bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
-      \nabla_{\vect\eta}\widehat u
+    \nabla_{\vect\eta}\widehat u
     = \bigl(J_{\gmap}^{\dagger}\bigr)^{\top}\nabla_{\vect\eta}\widehat u,
     \qquad
     J_{\gmap}^{\dagger} := \bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
-        J_{\gmap}^{\top},
+    J_{\gmap}^{\top},
     \label{eq:tangential-gradient}
 \end{equation}
 where $J_{\gmap}^{\dagger}$ is the Moore--Penrose \emph{left} inverse of the
@@ -261,7 +287,7 @@ knot vectors, we set
 \end{equation}
 One uniform $h$-refinement step inserts the midpoint of every non-empty knot
 span in every direction, so $r$ such steps divide the parametric element size
-by $2^{r}$.  
+by $2^{r}$.
 NURBS are obtained by assigning weights $w_i > 0$ and replacing
 $\Bref{i}{\vect{p}}$ with $\Rnurbs{i}{\vect{p}} = w_i
     \Bref{i}{\vect{p}} / \sum_{j=1}^n w_j \Bref{j}{\vect{p}}$ (B-splines
@@ -321,7 +347,7 @@ From Section~\ref{subsec:ieti} on,
 $\{\Bloc{k}{i}\}_{i=1}^{n_k}$ denotes this basis after strong elimination of the
 Dirichlet data on $\partial\patchdom{k} \cap \Gamma_D$.  Likewise, the mesh
 size~\eqref{eq:mesh-size} is defined patchwise, $h_k := \max_{\widehat{Q} \in
-    \widehat{\mathcal{Q}}_k} \operatorname{diam}\gmapk{k}(\widehat{Q})$, and
+        \widehat{\mathcal{Q}}_k} \operatorname{diam}\gmapk{k}(\widehat{Q})$, and
 globally as $h := \max_{k=1,\dots,\npatch} h_k$.
 
 The patches are assumed \emph{fully matching}~\cite{kleiss2012ieti}: two adjacent
@@ -531,14 +557,11 @@ The overall method is summarized in Algorithm~\ref{alg:ieti-dp}.
 
 The scaled Dirichlet preconditioner~\eqref{eq:scaled-dirichlet} requires one
 local Dirichlet Schur-complement action on every patch and at every PCG step.
-Our method replaces that local action by a cached, geometry-conditioned SPD
+Our method replaces that local action by a geometry-conditioned SPD
 operator, calibrates a small number of inaccurate local modes, and adds a
 low-dimensional correction on the assembled interface.  All three operations
 are completed once during setup.  The timed PCG solve sees only the resulting
-cached linear preconditioner.  Neither the local calibration nor the interface
-correction changes the IETI-DP operator~$\Fschur$, its right-hand
-side~$\gschur$, or the requested residual tolerance.
-
+linear preconditioner.
 \subsection{Geometry-conditioned local Schur operator}
 \label{subsec:local-model}
 
@@ -548,7 +571,7 @@ interior part $I_k$, as in Section~\ref{subsec:ieti}), and put
 $n_k^f=|\dofset_k|$ and $s_k=|\skel_k|$; the symbol $\gmapk{k}$ is reserved for
 the patch geometry maps.
 For $i\in\dofset_k$, let $\vect\eta_i^{\rm Gr}$ be the corresponding
-Greville abscissa and let
+Greville abscissa~\eqref{eq:greville} and let
 $\overline{\vect x}_i=(\gmapk{k}(\vect\eta_i^{\rm Gr}),0_{3-D})\in\R^3$
 be its physical position padded to three coordinates.  We describe the patch by
 \begin{equation}
@@ -592,13 +615,13 @@ $\varepsilon_\theta=\operatorname{softplus}(\widehat\varepsilon_\theta)$ for an
 unconstrained parameter $\widehat\varepsilon_\theta$.
 Equation~\eqref{eq:journal-local-spd} makes the learned map linear in
 $\vect v$, symmetric, and positive definite for every network output: the
-bracket is the sum of a positive semidefinite Gram matrix and
+bracket is the sum of a positive semidefinite matrix and
 $\varepsilon_\theta I$ with $\varepsilon_\theta>0$, and $R_k$ extracts a
 principal submatrix of it.  The
 Transformer is evaluated once per patch during setup.  PCG applications then
-can use the cached factors in $O(s_kd_v)$, without further neural inference;
-the controlled timings below instead use the common dense-local kernel
-specified in Section~\ref{sec:protocol}.
+can use the cached factors in $O(s_kd_v)$, without further neural inference.
+% the controlled timings below instead use the common dense-local kernel
+% specified in Section~\ref{sec:protocol}.
 
 Substitution in~\eqref{eq:scaled-dirichlet} defines the local neural
 preconditioner
@@ -609,9 +632,6 @@ preconditioner
     \Dmult{k}^{-1}\Jskel{k}^{\top}.
     \label{eq:journal-p0}
 \end{equation}
-The superscript $-1$ follows the usual preconditioner notation: $P_0$ is an
-approximation of the inverse of the interface operator, not a precomputed
-inverse of~$\Fschur$.
 
 \paragraph{Setup-time local calibration.}
 The learned matrix may be SPD and still be inaccurate in a few directions.
@@ -1011,7 +1031,7 @@ iterations and lower solve-only mean time than unmodified IETI-DP.
 
 \FloatBarrier
 
-\subsection{Target-grid retraining and projection reuse}
+\subsection{Target-grid retraining}
 \label{subsec:yeti-projection-results}
 
 Table~\ref{tab:journal-projection} tests the recommended target-grid strategy
@@ -1022,7 +1042,7 @@ $(p,r)$ and the complete calibrated preconditioner
 
 \begin{table}[t]
     \centering
-    \caption{Yeti target-grid recovery study.  Every row reports solve-only
+    \caption{Yeti target-grid retraining study.  Every row reports solve-only
         time and PCG iterations at tolerance $10^{-8}$; means use 50 solves and
         exclude setup.}
     \label{tab:journal-projection}
@@ -1032,16 +1052,14 @@ $(p,r)$ and the complete calibrated preconditioner
 At $(2,3)$, $(3,2)$, and $(4,2)$ the target-grid method needs respectively
 $9$, $8$, and $10$ iterations, versus $16$, $15$, and $16$ for unmodified
 IETI-DP.  Its solve-only speedups are $1.65\times$, $1.74\times$, and
-$1.52\times$.  Applying the identical correction to the classical base does
-not improve these three rows, so their gain is not explained by the
-correction alone.
-
-The no-retraining projector~\eqref{eq:journal-projection} remains a weaker
-fallback.  In a separate audited 50-repeat control, it gives
-$52.137$ ms/$16$, $9.706$ ms/$15$, and $17.068$ ms/$21$, while IETI-DP gives
-$49.397$ ms/$16$, $9.372$ ms/$15$, and $13.268$ ms/$16$.  Thus projection
-preserves usability at the first two targets but does not provide the
-performance claim made for target-grid retraining.
+$1.52\times$.  The third row of each block applies the identical correction to
+the classical base and leaves its count unchanged.  That row must not be read
+as evidence that the correction is ineffective on the classical
+preconditioner: as Section~\ref{subsec:ablation-attribution} shows, the
+matrix-free search accepts no Ritz mode at all on the Yeti, because the exact
+scaled-Dirichlet $P_0$ is singular there.  Constructing the same correction
+deterministically instead brings the classical base to $3$ iterations at all
+three targets, well below the target-grid neural counts.
 
 \FloatBarrier
 
