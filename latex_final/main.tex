@@ -1,0 +1,696 @@
+\documentclass{article}
+\usepackage[english]{babel}
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+
+% Useful packages
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{booktabs}
+\usepackage{subcaption}
+\usepackage{microtype}
+\usepackage{placeins} % \FloatBarrier
+% algorithms
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\algdef{SE}[PARFOR]{ParFor}{EndParFor}[1]{\textbf{parfor} $#1$ \textbf{do}}{\textbf{end parfor}}
+% bibliography
+\usepackage{authblk}
+\usepackage{csquotes}
+%\usepackage[style=numeric, backend=bibtex]{biblatex}
+%\addbibresource{references.bib}
+% tikz
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, fit, shapes.geometric, calc, shadows}
+% Author notes are suppressed in the submission version.  The commands remain
+% defined because Section 1 is intentionally kept verbatim.
+\newcommand{\mg}[1]{}
+\newcommand{\mginline}[1]{}
+\newcommand{\al}[1]{}
+\newcommand{\alinline}[1]{}
+
+\title{Neural preconditioning}
+\date{}
+\author[1]{Massimiliano Ghiotto}
+\author[2]{Alessandro Lucantonio}
+\affil[1]{Department of Mathematics, University of Pavia}
+\affil[2]{Department of Mechanical and Production Engineering, Aarhus University}
+
+
+
+% User defined commands
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\skel}{\Gamma} % skeleton (interface) index set
+\DeclareMathOperator{\spann}{span}
+\newcommand{\npatch}{K} % number of patches
+
+% -----------------------------------------------------------------------
+% Notation macros
+% -----------------------------------------------------------------------
+% Domains
+\newcommand{\refdom}{\widehat{\Omega}}            % reference/parameter domain
+\newcommand{\patchdom}[1]{\Omega_{#1}}            % k-th patch physical domain
+
+% Basis functions
+\newcommand{\bsuni}[2]{\widehat{b}_{#1,#2}}      % univariate B-spline
+\newcommand{\Bref}[2]{\widehat{B}_{#1,#2}}       % reference tensor-product B-spline
+\newcommand{\Bphy}[2]{B_{#1,#2}}                  % physical (push-forward) basis function
+\newcommand{\Bloc}[2]{B^{(#1)}_{#2}}              % local patch basis (patch index, DOF index)
+\newcommand{\Rnurbs}[2]{\widehat{R}_{#1,#2}}     % NURBS (rational) basis
+
+% Function spaces
+\newcommand{\Shat}[1]{\widehat{\mathcal{V}}_{#1}} % reference spline space (uni- or multivariate)
+\newcommand{\Vglo}{\mathcal{V}_h}                  % global conforming IGA space
+\newcommand{\Vloc}[1]{\mathcal{V}_{#1}}            % local patch IGA space
+\newcommand{\Vprod}{\mathcal{V}_h^{\Pi}}           % product (broken) space
+
+% Geometry maps
+\newcommand{\gmap}{\mathcal{F}}                   % geometry map (single-patch or global context)
+\newcommand{\gmapk}[1]{\mathcal{F}_{#1}}         % patch-k geometry map
+
+% Global stiffness and load
+\newcommand{\Aglo}{A}                             % global stiffness matrix
+\newcommand{\fglo}{\vect{f}}                      % global load vector
+\newcommand{\uglo}{\vect{u}}                      % global solution vector
+
+% Local stiffness and load
+\newcommand{\Aloc}[1]{A_{#1}}                    % local stiffness matrix
+\newcommand{\Aaug}[1]{\widetilde{A}_{#1}}        % augmented (IETI) stiffness
+\newcommand{\floc}[1]{\vect{f}_{#1}}             % local load vector
+\newcommand{\faug}[1]{\widetilde{\vect{f}}_{#1}} % augmented load vector
+
+% Jump (continuity) matrices -- J to avoid clash with basis functions B
+\newcommand{\Jloc}[1]{J_{#1}}                    % local jump matrix
+\newcommand{\Jfull}{J}                            % global jump operator
+\newcommand{\Jskel}[1]{\widehat{J}_{#1}}         % jump restricted to skeleton DOFs
+\newcommand{\Jaug}[1]{\widetilde{J}_{#1}}        % augmented jump (IETI)
+
+% Schur complements
+\newcommand{\Sloc}[1]{S_{#1}}                    % local Dirichlet Schur complement
+\newcommand{\Snn}{\mathcal{S}_{\theta}}          % neural Schur operator
+
+% Primal constraints and basis
+\newcommand{\Cloc}[1]{C_{#1}}                    % primal constraint matrix
+\newcommand{\Psik}[1]{\Psi_{#1}}                 % primal energy-minimising basis
+\newcommand{\nprim}{n_\Pi}                        % number of primal DOFs
+
+% Interface (dual) system
+\newcommand{\Fschur}{F}                           % interface Schur operator
+\newcommand{\gschur}{\vect{g}}                    % interface right-hand side
+
+% Preconditioners
+\newcommand{\Psd}{M_{sD}^{-1}}                   % scaled Dirichlet preconditioner
+\newcommand{\Pneural}{M_{\theta}^{-1}}            % neural preconditioner
+
+% Neural architecture
+\newcommand{\dv}{d_v}                             % latent dimension of Transformer
+
+% Multiplicity scaling
+\newcommand{\Dmult}[1]{D_{#1}}                   % multiplicity-weighted diagonal
+
+% Free local degrees of freedom of patch k (skeleton + interior)
+\newcommand{\dofset}{\mathcal{N}}                % index set of free local dofs
+
+% Local and augmented solutions
+\newcommand{\uloc}[1]{\vect{u}_{#1}}             % local patch solution
+\newcommand{\uaug}[1]{\widetilde{\vect{u}}_{#1}} % augmented local solution (IETI)
+\newcommand{\lagmult}{\vect{\lambda}}             % Lagrange multipliers
+
+% -----------------------------------------------------------------------
+
+% Theorem environments
+\usepackage{amsthm}
+\theoremstyle{plain}
+\newtheorem{ass}{Assumption}
+\newtheorem{lemma}{Lemma}
+\newtheorem{prop}{Proposition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{df}{Definition}
+\newtheorem{rmk}{Remark}
+\newtheorem{cor}{Corollary}
+\numberwithin{equation}{section}
+
+
+\begin{document}
+\maketitle
+% \tableofcontents
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Abstract
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+\end{abstract}
+
+\noindent\textbf{Keywords:} isogeometric analysis; IETI-DP; domain
+decomposition; neural preconditioning; Schur complement; geometry transfer.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Section
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Preliminaries} \label{sec:preliminaries}
+
+In this section we fix the notation and recall the principal concepts needed in the
+remainder of the paper. We first define B-splines and the associated
+isogeometric spaces (Section~\ref{subsec:bsplines}), state the model problem and
+its multipatch discretization (Section~\ref{subsec:model}), and summarize the
+dual-primal Isogeometric Tearing and Interconnecting (IETI-DP) method
+(Section~\ref{subsec:ieti}) \cite{kleiss2012ieti}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{B-splines and isogeometric spaces} \label{subsec:bsplines}
+
+Given integers $m, p > 0$, a knot vector is a non-decreasing sequence
+$\Xi := \{0 = \xi_1 \le \dots \le \xi_{m+p+1} = 1\}$, which we take \emph{open},
+i.e.\ $\xi_1 = \dots = \xi_{p+1} = 0$ and $\xi_{m+1} = \dots = \xi_{m+p+1} = 1$.
+The Cox--de Boor recursion~\cite{de1978practical} defines the univariate B-spline
+basis functions $\bsuni{i}{p} : [0,1] \to \R$, $i = 1, \dots, m$:
+\begin{equation*}
+    \bsuni{i}{0}(\eta) =
+    \begin{cases}
+        1 & \text{if } \xi_i \le \eta < \xi_{i+1}, \\
+        0 & \text{otherwise},
+    \end{cases}
+    \qquad
+    \bsuni{i}{p}(\eta) =
+    \frac{\eta - \xi_i}{\xi_{i+p} - \xi_i}\, \bsuni{i}{p-1}(\eta)
+    + \frac{\xi_{i+p+1} - \eta}{\xi_{i+p+1} - \xi_{i+1}}\, \bsuni{i+1}{p-1}(\eta),
+\end{equation*}
+with the convention $0/0 = 0$; an interior knot of multiplicity $\kappa$ yields
+$C^{p-\kappa}$ continuity~\cite{cottrell2009isogeometric}. The constructed basis functions span the univariate
+spline space $\Shat{p} := \spann\{\bsuni{i}{p}\}_{i=1}^{m}$.
+Multivariate B-splines are constructed with tensor products; on $\refdom := (0,1)^d$,
+with a degree $p_l$ and an open knot vector per direction $l = 1, \dots, d$, we
+set $\Bref{\vect{i}}{\vect{p}}(\vect{\eta}) := \prod_{l=1}^{d}
+    \bsuni{i_l}{p_l}(\eta_l)$ for $\vect{\eta} \in \refdom$. Defining a
+colexicographical reordering into a single index $i = 1, \dots, n$, with
+$n := \prod_{l=1}^{d} m_l$, gives the reference function space $\Shat{\vect{p}} :=
+    \spann\{\Bref{i}{\vect{p}}\}_{i=1}^{n}$.
+
+Each basis function is canonically located at its \emph{Greville abscissa}, the
+average of the $p$ interior knots of its support,
+\begin{equation}
+    \gamma_i := \frac{1}{p} \sum_{j=i+1}^{i+p} \xi_j,
+    \qquad i = 1, \dots, m,
+    \label{eq:greville}
+\end{equation}
+so that $\gamma_i$ lies in the support of $\bsuni{i}{p}$, close to its maximum,
+and $0 = \gamma_1 < \dots < \gamma_m = 1$ whenever the interior knots have
+multiplicity at most $p$.  These points are not an arbitrary choice: they are the
+control points of the identity map,
+\begin{equation}
+    \sum_{i=1}^{m} \gamma_i\, \bsuni{i}{p}(\eta) = \eta
+    \qquad \forall\, \eta \in [0,1],
+    \label{eq:greville-identity}
+\end{equation}
+which identifies $\gamma_i$ as the parametric coordinate of the $i$-th degree of
+freedom, and the associated collocation matrix
+$\bigl[\bsuni{j}{p}(\gamma_i)\bigr]_{i,j=1}^{m}$ satisfies the
+Schoenberg--Whitney condition and is therefore
+nonsingular~\cite{de1978practical}.  In the tensor-product case, the Greville
+abscissa of $\Bref{i}{\vect{p}}$ with multi-index $\vect{i} = (i_1, \dots, i_d)$
+is $\vect\eta_i^{\rm Gr} := \bigl(\gamma_{i_1}^{(1)}, \dots,
+    \gamma_{i_d}^{(d)}\bigr) \in \refdom$, where $\gamma^{(l)}$
+denotes~\eqref{eq:greville} for direction $l$.
+
+The physical domain $\Omega \subset \R^{D}$ ($D \ge d$) is the image
+$\Omega = \gmap(\refdom)$ of a \emph{geometry map}
+$\gmap = \sum_{i=1}^{n} \vect{P}_i\, \Bref{i}{\vect{p}} \in
+    [\Shat{\vect{p}}]^{D}$ with control points $\vect{P}_i \in \R^{D}$.
+We assume that the geometry map is invertible with full-rank Jacobian $J_{\gmap} = D\gmap$.
+For $D = d$ the domain is planar or volumetric; for $D > d$ it is a manifold
+(e.g.\ a surface in $\R^3$) and $\nabla_\Omega$ denotes the tangential gradient,
+which takes values in the tangent space $\operatorname{range}(J_{\gmap})$.  Writing
+$\widehat u := u \circ \gmap$, the chain rule gives
+$\nabla_{\vect\eta}\widehat u = J_{\gmap}^{\top}\nabla_\Omega u$.  Because
+$\nabla_\Omega u \in \operatorname{range}(J_{\gmap})$, this relation determines
+$\nabla_\Omega u$ uniquely:
+\begin{equation}
+    \nabla_\Omega u
+    = J_{\gmap}\bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
+    \nabla_{\vect\eta}\widehat u
+    = \bigl(J_{\gmap}^{\dagger}\bigr)^{\top}\nabla_{\vect\eta}\widehat u,
+    \qquad
+    J_{\gmap}^{\dagger} := \bigl(J_{\gmap}^{\top} J_{\gmap}\bigr)^{-1}
+    J_{\gmap}^{\top},
+    \label{eq:tangential-gradient}
+\end{equation}
+where $J_{\gmap}^{\dagger}$ is the Moore--Penrose \emph{left} inverse of the
+tall, full-column-rank matrix $J_{\gmap} \in \R^{D\times d}$; the right inverse
+$J_{\gmap}^{\top}(J_{\gmap}J_{\gmap}^{\top})^{-1}$ does not exist for $D>d$, since
+$J_{\gmap}J_{\gmap}^{\top}\in\R^{D\times D}$ has rank $d<D$.  For $D=d$,
+\eqref{eq:tangential-gradient} reduces to the familiar
+$\nabla_\Omega u = J_{\gmap}^{-\top}\nabla_{\vect\eta}\widehat u$.
+By the isoparametric paradigm~\cite{hughes2005isogeometric}, the isogeometric
+space on $\Omega$ is
+\begin{equation}
+    \Vglo := \spann\bigl\{ \Bphy{i}{\vect{p}} := \Bref{i}{\vect{p}} \circ
+    \gmap^{-1} \ \big|\ i = 1, \dots, n \bigr\}.
+    \label{eq:isogeometric-space}
+\end{equation}
+The subscript $h$ is the \emph{mesh size}: denoting by $\widehat{\mathcal{Q}}$ the
+partition of $\refdom$ into the (non-empty) knot-span elements induced by the
+knot vectors, we set
+\begin{equation}
+    h := \max_{\widehat{Q}\in\widehat{\mathcal{Q}}}
+    \operatorname{diam}\gmap(\widehat{Q}).
+    \label{eq:mesh-size}
+\end{equation}
+One uniform $h$-refinement step inserts the midpoint of every non-empty knot
+span in every direction, so $r$ such steps divide the parametric element size
+by $2^{r}$.
+NURBS are obtained by assigning weights $w_i > 0$ and replacing
+$\Bref{i}{\vect{p}}$ with $\Rnurbs{i}{\vect{p}} = w_i
+    \Bref{i}{\vect{p}} / \sum_{j=1}^n w_j \Bref{j}{\vect{p}}$ (B-splines
+being the case $w_i \equiv 1$).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Model problem and multipatch discretization} \label{subsec:model}
+
+As a model problem we take the scalar diffusion equation on an open, bounded,
+connected Lipschitz domain $\Omega \subset \R^{D}$ with $\partial\Omega =
+    \overline{\Gamma_D} \cup \overline{\Gamma_N}$, $\Gamma_D \cap \Gamma_N =
+    \emptyset$. Given $\alpha \in L^\infty(\Omega)$ with $\alpha \ge \alpha_0 > 0$,
+$f \in L^2(\Omega)$ and boundary data $g_D, g_N$, we seek $u$ with
+\begin{equation}
+    -\nabla \cdot (\alpha \nabla u) = f \ \text{ in } \Omega,
+    \qquad u = g_D \ \text{ on } \Gamma_D,
+    \qquad \alpha\, \partial_n u = g_N \ \text{ on } \Gamma_N,
+    \label{eq:poisson-strong}
+\end{equation}
+where $\partial_n$ is the outward normal derivative.
+The weak form reads: find $u \in V_{g_D} := \{ v \in H^1(\Omega) : v_{|\Gamma_D}
+    = g_D \}$ such that
+\begin{equation}
+    \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega = \int_{\Omega} f v \,\mathrm{d}\Omega + \int_{\Gamma_N} g_N v
+    \,\mathrm{d}s \qquad \forall\, v \in V_0 := \{ v \in H^1(\Omega) :
+    v_{|\Gamma_D} = 0 \}.
+    \label{eq:weak-form}
+\end{equation}
+We denote $a(u, v) := \int_{\Omega} \alpha\, \nabla u \cdot \nabla v\,\mathrm{d}\Omega$
+and $F(v) := \int_{\Omega} f v \,\mathrm{d}\Omega + \int_{\Gamma_N} g_N v
+    \,\mathrm{d}s$. If $\Gamma_D = \emptyset$ (a closed surface, or pure Neumann
+data), $a(\cdot,\cdot)$ is only positive semidefinite: the constants lie in its
+kernel, the problem is solvable only under the compatibility condition
+$\int_\Omega f \,\mathrm{d}\Omega + \int_{\partial\Omega} g_N \,\mathrm{d}s = 0$,
+and its solution is then unique only up to an additive constant, which can be
+fixed for instance by the zero-mean condition $\int_\Omega u
+    \,\mathrm{d}\Omega = 0$.  All experiments in this paper use
+$\Gamma_D \neq \emptyset$.
+
+We discretize on a non-overlapping multipatch decomposition into $\npatch$
+patches,
+\begin{equation}
+    \overline{\Omega} = \bigcup_{k=1}^{\npatch} \overline{\patchdom{}}_{k},
+    \qquad \patchdom{k} \cap \patchdom{l} = \emptyset \ \text{ for } k,l = 1, \ldots, \npatch, \text{ and } k \neq l,
+    \label{eq:multipatch}
+\end{equation}
+each the image $\patchdom{k} = \gmapk{k}(\refdom)$, $k = 1, \ldots, \npatch$, of
+\emph{its own} geometry map $\gmapk{k}$.  Definition~\eqref{eq:isogeometric-space}
+is therefore applied patchwise: each patch carries its own reference space, with
+its own degrees $\vect{p}_k$ and knot vectors, and the local isogeometric space is
+\begin{equation}
+    \Vloc{k} := \spann\bigl\{ \Bloc{k}{i} := \Bref{i}{\vect{p}_k} \circ
+    \gmapk{k}^{-1} \ \big|\ i = 1, \dots, n_k \bigr\},
+    \label{eq:local-space}
+\end{equation}
+From Section~\ref{subsec:ieti} on,
+$\{\Bloc{k}{i}\}_{i=1}^{n_k}$ denotes this basis after strong elimination of the
+Dirichlet data on $\partial\patchdom{k} \cap \Gamma_D$.  Likewise, the mesh
+size~\eqref{eq:mesh-size} is defined patchwise, $h_k := \max_{\widehat{Q} \in
+        \widehat{\mathcal{Q}}_k} \operatorname{diam}\gmapk{k}(\widehat{Q})$, and
+globally as $h := \max_{k=1,\dots,\npatch} h_k$.
+
+The patches are assumed \emph{fully matching}~\cite{kleiss2012ieti}: two adjacent
+patches share a complete edge/face on which their parametrizations and the traces
+of their local bases coincide, so that the basis functions of the two patches
+meeting at the interface are in one-to-one correspondence.  Identifying each such
+pair gives the \emph{conforming} global space $\Vglo := \{ v \in H^1(\Omega) : v_{|\patchdom{k}} \in \Vloc{k},
+    \ k=1, \ldots, \npatch \}$.
+For $\npatch = 1$ this reduces to~\eqref{eq:isogeometric-space}.
+
+Dirichlet data are imposed strongly, so the trial and test spaces are the affine
+set $\Vglo \cap V_{g_D}$ and the subspace $\Vglo^0 := \Vglo \cap V_0$.  Setting
+$N := \dim \Vglo^0$ and fixing a basis $\{\Bphy{i}{\vect{p}}\}_{i=1}^{N}$ of
+$\Vglo^0$, the
+Galerkin discretization of~\eqref{eq:weak-form} is the following linear system
+\begin{equation}
+    \Aglo\, \uglo = \fglo, \qquad
+    \Aglo_{ij} = a(\Bphy{j}{\vect{p}}, \Bphy{i}{\vect{p}}), \quad
+    \fglo_i = F(\Bphy{i}{\vect{p}}), \quad i, j = 1, \dots, N.
+    \label{eq:global-system}
+\end{equation}
+The matrix $\Aglo$ is symmetric positive definite (SPD) when $\Gamma_D \neq \emptyset$, but it becomes
+increasingly ill-conditioned under mesh refinement and
+degree elevation~\cite{gahalaut2019condition, sangalli2016isogeometric}, so that
+suitable preconditioners for Krylov methods have to be
+designed~\cite{van2003iterative}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{The IETI-DP method} \label{subsec:ieti}
+
+Dual-primal Isogeometric Tearing and Interconnecting (IETI-DP) is the
+isogeometric counterpart of the FETI-DP family of non-overlapping domain
+decomposition methods~\cite{farhat1991method, toselli2004domain}.
+The patches of~\eqref{eq:multipatch} serve directly as subdomains, so no
+auxiliary mesh partitioning is required.
+A defining feature of IETI-DP is that \emph{all dominant computational
+    work is patch-local and parallelizable}: local stiffness assembly,
+Cholesky factorization of local augmented systems, and the per-iteration
+back-solves in the scaled Dirichlet preconditioner are each fully independent
+across patches \cite{kleiss2012ieti}. Only the coarse problem, of size $\nprim \times \nprim$ with $\nprim = O(K)$
+primal dofs, requires global communication.
+
+\paragraph{Local problems and jump operator.}
+The IETI-DP discretization is defined over the \emph{broken} (non-conforming)
+space $\Vprod := \prod_{k=1}^{\npatch}
+    \Vloc{k} \supset \Vglo$. Each patch carries the local stiffness matrix and load vector
+\begin{equation}
+    (\Aloc{k})_{ij} := \int_{\patchdom{k}} \alpha\, \nabla \Bloc{k}{j} \cdot
+    \nabla \Bloc{k}{i} \,\mathrm{d}\Omega, \qquad
+    (\floc{k})_{i} := \int_{\patchdom{k}} f \Bloc{k}{i} \,\mathrm{d}\Omega
+    + \int_{\Gamma_N \cap \partial\patchdom{k}} g_N \Bloc{k}{i} \,\mathrm{d}s,
+    \label{eq:local-stiffness}
+\end{equation}
+with $i, j = 1, \dots, n_k$ and $k=1, \ldots, \npatch$, where $\{\Bloc{k}{i}\}_{i=1}^{n_k}$ is the basis of
+$\Vloc{k}$ after strong elimination of the Dirichlet data on
+$\partial\patchdom{k} \cap \Gamma_D$. Thus $\Aloc{k} \in \R^{n_k \times n_k}$ is
+symmetric positive semidefinite -- SPD exactly when
+$\partial\patchdom{k} \cap \Gamma_D \neq \emptyset$, and singular with the
+constants in its kernel otherwise (see the floating patches below) --
+and $\uloc{k} \in \R^{n_k}$ represents $u_k = \sum_i (\uloc{k})_i \Bloc{k}{i}$.
+Continuity across patch interfaces is enforced via Lagrange multipliers
+$\lagmult \in \R^{\Lambda}$. Introducing the signed Boolean \emph{jump matrices}
+$\Jloc{k} \in \R^{\Lambda \times n_k}$ and $\Jfull := (\Jloc{1}, \dots, \Jloc{\npatch})$,
+the continuity constraint can be written as $\sum_{k=1}^{\npatch} \Jloc{k} \uloc{k} = \vect{0}$.
+Minimizing the broken energy $\sum_k (\tfrac12 \uloc{k}^{\top} \Aloc{k} \uloc{k} -
+    \floc{k}^{\top} \uloc{k})$ subject to the continuity constraint, with
+multiplier $\lagmult \in \R^{\Lambda}$, gives the saddle-point system
+\begin{equation}
+    \begin{pmatrix}
+        \Aloc{1} &        &                & \Jloc{1}^{\top}       \\
+                 & \ddots &                & \vdots                \\
+                 &        & \Aloc{\npatch} & \Jloc{\npatch}^{\top} \\
+        \Jloc{1} & \cdots & \Jloc{\npatch} & 0
+    \end{pmatrix}
+    \begin{pmatrix}
+        \uloc{1} \\ \vdots \\ \uloc{\npatch} \\ \lagmult
+    \end{pmatrix}
+    =
+    \begin{pmatrix}
+        \floc{1} \\ \vdots \\ \floc{\npatch} \\ \vect{0}
+    \end{pmatrix}.
+    \label{eq:ieti-saddle}
+\end{equation}
+
+\paragraph{Primal constraints and Schur complement.}
+The blocks $\Aloc{k}$ of floating patches ($\partial\patchdom{k} \cap \Gamma_D =
+    \emptyset$) are singular. The dual-primal approach removes these singularities by selecting some \emph{primal}
+degrees of freedom (dof), usually corner values and/or interface averages, stacked as the
+rows of a constraint matrix $\Cloc{k} \in \R^{q_k \times n_k}$.
+This regularizes the local blocks and introduces a global
+coarse subdomain $k = \npatch + 1$:
+\begin{equation}
+    \Aaug{k} =
+    \begin{pmatrix} \Aloc{k} & \Cloc{k}^{\top} \\ \Cloc{k} & 0 \end{pmatrix},
+    \quad
+    \Jaug{k} = \begin{pmatrix} \Jloc{k} & 0 \end{pmatrix},
+    \quad
+    \faug{k} = \begin{pmatrix} \floc{k} \\ \vect{0} \end{pmatrix},
+    \qquad
+    \begin{aligned}
+        \Aaug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Psik{k} \Aloc{k} \Psik{k}^{\top}, \\
+        \Jaug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Jloc{k} \Psik{k}^{\top},          \\
+        \faug{\npatch+1} & = \textstyle\sum_{k=1}^{\npatch} \Psik{k} \floc{k}.
+    \end{aligned}
+    \label{eq:augmented-blocks}
+\end{equation}
+With $\nprim$ we indicate the number of primal degrees of freedom, and $\Psik{k} \in
+    \R^{\nprim \times n_k}$ represents the energy-minimizing primal basis functions;
+see~\cite{kleiss2012ieti} for the explicit construction. Eliminating the
+$\uaug{k}$ leaves an SPD system for the multipliers alone,
+\begin{equation}
+    \Fschur \lagmult = \gschur,
+    \quad
+    \Fschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1}
+    \Jaug{k}^{\top},
+    \quad
+    \gschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1}
+    \faug{k}.
+    \label{eq:ieti-schur}
+\end{equation}
+The system is solved by conjugate gradient (CG), and $\uglo$ is
+recovered from $\lagmult$ by solving the coarse global problem in \eqref{eq:augmented-blocks}
+and then the local problems in parallel.
+
+\paragraph{Scaled Dirichlet preconditioner.}
+The system~\eqref{eq:ieti-schur} is large and ill-conditioned, so CG is
+preconditioned by the scaled Dirichlet preconditioner~\cite{kleiss2012ieti,
+    pechstein2013finite}
+\begin{equation}
+    \Psd = \sum_{k=1}^{\npatch}
+    \Jskel{k}\, \Dmult{k}^{-1}\, \Sloc{k}\, \Dmult{k}^{-1}\, \Jskel{k}^{\top}.
+    \label{eq:scaled-dirichlet}
+\end{equation}
+Here $\Jskel{k}$ is the restriction of $\Jloc{k}$ to the skeleton dofs $\skel_k$
+(interfaces and Neumann boundary, complementary to the interior $I_k$).
+The diagonal matrix $\Dmult{k}$ is the multiplicity scaling, with
+$(\Dmult{k})_{jj} = \mathrm{mult}(j)$, where $\mathrm{mult}(j)$ counts the
+number of patches sharing dof $j$.
+Finally, $\Sloc{k}$ is the local Dirichlet Schur complement of $\Aloc{k}$ onto
+the skeleton. Partitioning $\Aloc{k}$ into interior and skeleton blocks,
+\begin{equation}
+    \Sloc{k} = A^{(k)}_{\skel\skel}
+    - A^{(k)}_{\skel I}\, \bigl(A^{(k)}_{II}\bigr)^{-1}\, A^{(k)}_{I\skel}
+    \ \in\ \R^{|\skel_k| \times |\skel_k|}.
+    \label{eq:local-schur}
+\end{equation}
+The overall method is summarized in Algorithm~\ref{alg:ieti-dp}.
+
+\begin{algorithm}[t]
+    \caption{IETI-DP solver for the model problem~\eqref{eq:poisson-strong}.}
+    \label{alg:ieti-dp}
+    \begin{algorithmic}[1]
+        \Require multipatch $\{\patchdom{k}\}_{k=1}^{\npatch}$, data $(\alpha, f, g_D, g_N)$,
+        choice of primal degrees of freedom
+        \Ensure  discrete continuous approximated solution $u_h \in \Vglo$
+        \vspace{0.2cm}
+        \Statex \textbf{Assembly and setup}
+        \ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
+        \State assemble local stiffness $\Aloc{k}$ and load $\floc{k}$
+        \Comment{Eq.~\eqref{eq:local-stiffness}}
+        \State form jump matrix $\Jloc{k}$ and primal constraints $\Cloc{k}$
+        \State build augmented blocks $\Aaug{k}, \Jaug{k},
+            \faug{k}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
+        \State factorize $\Aaug{k}$ \Comment{one Cholesky per patch; used in all CG steps}
+        \EndParFor
+        \State assemble and factorize coarse blocks $\Aaug{\npatch+1},
+            \Jaug{\npatch+1}, \faug{\npatch+1}$ \Comment{Eq.~\eqref{eq:augmented-blocks}}
+        \vspace{0.2cm}
+        \Statex \textbf{Interface dual problem}
+        \State $\gschur \gets \sum_{k=1}^{\npatch+1} \Jaug{k}
+            \Aaug{k}^{-1} \faug{k}$ \Comment{Eq.~\eqref{eq:ieti-schur}}
+        \State solve $\Fschur \lagmult = \gschur$ by preconditioned CG, where $\Fschur = \sum_{k=1}^{\npatch+1} \Jaug{k} \Aaug{k}^{-1} \Jaug{k}^{\top}$
+        \vspace{0.2cm}
+        \Statex \textbf{Reconstruction}
+        \State solve the primal problem:
+        $\uaug{\npatch+1} \gets \Aaug{\npatch+1}^{-1}
+            (\faug{\npatch+1} - \Jaug{\npatch+1}^{\top} \lagmult)$ \Comment{global coarse problem}
+        \ParFor{k = 1, \dots, \npatch} \Comment{parallel over patches}
+        \State $\uaug{k} \gets \Aaug{k}^{-1}
+            (\faug{k} - \Jaug{k}^{\top} \lagmult)$
+        \EndParFor
+        \State assemble $u_h \in \Vglo$ from $\{\uaug{k}\}_{k=1}^{\npatch}$
+        \State \Return $u_h$
+    \end{algorithmic}
+\end{algorithm}
+
+\begin{rmk}[Parallel structure and serial cost] \label{rmk:schur-cost}
+    Each preconditioned CG step applies $\Psd$ via $\npatch$ local
+    Schur-complement actions (Eq.~\eqref{eq:local-schur}), each requiring one
+    back-solve with the precomputed factorization of the \emph{interior} block
+    $A^{(k)}_{II}$; the factorization of the augmented block $\Aaug{k}$ is used
+    separately, in the applications of $\Fschur$ in~\eqref{eq:ieti-schur}.
+    These $\npatch$ actions are mutually independent and constitute the dominant
+    per-iteration cost~\cite[\S4.5]{kleiss2012ieti}.
+    For a banded local factorization of a $d=2$ tensor-product patch the
+    bandwidth is $O(p\,n_k^{1/2})$, so one back-solve costs $O(p\,n_k^{3/2})$ and
+    a serial CG step costs $O(\npatch\, p\,n_k^{3/2})$.
+    With $\npatch$ processors the per-step cost becomes independent of
+    $\npatch$, i.e.\ $O(p\,n_k^{3/2})$.
+\end{rmk}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Section: proposed method
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Geometry-conditioned two-level neural IETI-DP}
+\label{sec:method}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Bibliography (Harvard notation)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\clearpage
+\begin{thebibliography}{99}
+    \bibitem{george1973nested}
+    George, J.A., 1973. Nested dissection of a regular finite element mesh. SIAM Journal on Numerical Analysis, 10(2), pp.345--363.
+
+    \bibitem{hackbusch1994iterative}
+    Hackbusch, W., 1994. Iterative solution of large sparse systems of equations. Springer-Verlag, New York.
+
+    \bibitem{saad2003iterative}
+    Saad, Y., 2003. Iterative methods for sparse linear systems (2nd edn.). SIAM, Philadelphia.
+
+    \bibitem{van2003iterative}
+    Van der Vorst, H.A., 2003. Iterative Krylov methods for large linear systems (No. 13). Cambridge University Press.
+
+    \bibitem{kleiss2012ieti}
+    Kleiss, S.K., Pechstein, C., Jüttler, B. and Tomar, S., 2012. IETI–isogeometric tearing and interconnecting. Computer methods in applied mechanics and engineering, 247, pp.201-215.
+
+    \bibitem{schneckenleitner2020condition}
+    Schneckenleitner, R. and Takacs, S., 2020. Condition number bounds for IETI-DP methods that are explicit in $h$ and $p$. Mathematical Models and Methods in Applied Sciences, 30(11), pp.2067--2103.
+
+    \bibitem{farhat1991method}
+    Farhat, C. and Roux, F.X., 1991. A method of finite element tearing and interconnecting and its parallel solution algorithm. International Journal for Numerical Methods in Engineering, 32(6), pp.1205-1227.
+
+    \bibitem{hofer2018dual}
+    Hofer, C. and Langer, U., 2017. Dual-primal isogeometric tearing and interconnecting solvers for multipatch dG-IgA equations. Computer Methods in Applied Mechanics and Engineering, 316, pp.2-21.
+
+    \bibitem{pechstein2013finite}
+    Pechstein, C., 2013. Finite and boundary element tearing and interconnecting solvers for multiscale problems. Lecture Notes in Computational Science and Engineering, Vol. 90. Springer.
+
+    \bibitem{wu2026dlhim}
+    Wu, Y., van Beek, J.W., Dolean, V. and Heinlein, A., 2026. Are Deep Learning Based Hybrid PDE Solvers Reliable? Why Training Paradigms and Update Strategies Matter. arXiv preprint arXiv:2602.06842.
+
+    \bibitem{Lynch1964}
+    Lynch, R.E., Rice, J.R. and Thomas, D.H., 1964. Direct solution of partial difference equations by tensor product methods. Numerische Mathematik, 6(1), pp.185-199.
+
+    \bibitem{de2011geopdes}
+    De Falco, C., Reali, A. and Vázquez, R., 2011. GeoPDEs: a research tool for isogeometric analysis of PDEs. Advances in Engineering Software, 42(12), pp.1020-1034.
+
+    \bibitem{de1978practical}
+    De Boor, C. and De Boor, C., 1978. A practical guide to splines (Vol. 27, p. 325). New York: springer.
+
+    \bibitem{fanaskov2023spectral}
+    Fanaskov, V.S. and Oseledets, I.V., 2023, December. Spectral neural operators. In Doklady Mathematics (Vol. 108, No. Suppl 2, pp. S226-S232). Moscow: Pleiades Publishing.
+
+    \bibitem{montardini2025isogeometric}
+    Montardini, M., Takacs, S. and Tani, M., 2025. The Isogeometric Fast Fourier-based Diagonalization method. arXiv preprint arXiv:2512.20269.
+
+    \bibitem{cottrell2009isogeometric}
+    Cottrell, J.A., Hughes, T.J. and Bazilevs, Y., 2009. Isogeometric analysis: toward integration of CAD and FEA. John Wiley $\&$ Sons.
+
+    \bibitem{adler2010geometry}
+    Adler, R.J., 2010. The geometry of random fields. Society for Industrial and Applied Mathematics.
+
+    \bibitem{saad1993flexible}
+    Saad, Y., 1993. A flexible inner-outer preconditioned GMRES algorithm. SIAM Journal on Scientific Computing, 14(2), pp.461-469.
+
+    \bibitem{ghiotto2025hypernos}
+    Ghiotto, M., 2025. HyperNOs: automated and parallel library for neural operators research. Bollettino dell'Unione Matematica Italiana, pp.1-35.
+
+    \bibitem{srivastava2014dropout}
+    Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I. and Salakhutdinov, R., 2014. Dropout: a simple way to prevent neural networks from overfitting. The journal of machine learning research, 15(1), pp.1929-1958.
+
+    \bibitem{math10214014}
+    Cui, C., Jiang, K., Liu, Y. and Shu, S., 2022. Fourier neural solver for large sparse linear algebraic systems. Mathematics, 10(21), p.4014.
+
+    \bibitem{vaswani2017attention}
+    Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł. and Polosukhin, I., 2017. Attention is all you need. Advances in neural information processing systems, 30.
+
+    \bibitem{he2016identity}
+    He, K., Zhang, X., Ren, S. and Sun, J., 2016, September. Identity mappings in deep residual networks. In European conference on computer vision (pp. 630-645). Cham: Springer International Publishing.
+
+    \bibitem{he2016deep}
+    He, K., Zhang, X., Ren, S. and Sun, J., 2016. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 770-778).
+
+    \bibitem{kahana2023geometry}
+    Kahana, A., Zhang, E., Goswami, S., Karniadakis, G., Ranade, R. and Pathak, J., 2023. On the geometry transferability of the hybrid iterative numerical solver for differential equations. Computational Mechanics, 72(3), pp.471-484.
+
+    \bibitem{kopanivcakova2025deeponet}
+    Kopaničáková, A. and Karniadakis, G.E., 2025. Deeponet based preconditioning strategies for solving parametric linear systems of equations. SIAM Journal on Scientific Computing, 47(1), pp.C151-C181.
+
+    \bibitem{brenner2008mathematical}
+    Brenner, S.C. and Scott, L.R., 2008. The mathematical theory of finite element methods. New York, NY: Springer New York.
+
+    \bibitem{sampath2010parallel}
+    Sampath, R.S. and Biros, G., 2010. A parallel geometric multigrid method for finite elements on octree meshes. SIAM Journal on Scientific Computing, 32(3), pp.1361-1392.
+
+    \bibitem{lee2025hybrid}
+    Lee, Y., Florencio, F.L., Pathak, J. and Karniadakis, G.E., 2025. Hybrid Iterative Solvers with Geometry-Aware Neural Preconditioners for Parametric PDEs. arXiv preprint arXiv:2512.14596.
+
+    \bibitem{chen1995universal}
+    Chen, T. and Chen, H., 1995. Universal approximation to nonlinear operators by neural networks with arbitrary activation functions and its application to dynamical systems. IEEE transactions on neural networks, 6(4), pp.911-920.
+
+    \bibitem{hughes2005isogeometric}
+    Hughes, T.J., Cottrell, J.A. and Bazilevs, Y., 2005. Isogeometric analysis: CAD, finite elements, NURBS, exact geometry and mesh refinement. Computer methods in applied mechanics and engineering, 194(39-41), pp.4135-4195.
+
+    \bibitem{hendrycks2016gaussian}
+    Hendrycks, D. and Gimpel, K., 2016. Gaussian error linear units (gelus). arXiv preprint arXiv:1606.08415.
+
+    \bibitem{watanabe2023tree}
+    Watanabe, S., 2023. Tree-structured parzen estimator: Understanding its algorithm components and their roles for better empirical performance. arXiv preprint arXiv:2304.11127.
+
+    \bibitem{bergstra2015hyperopt}
+    Bergstra, J., Komer, B., Eliasmith, C., Yamins, D. and Cox, D.D., 2015. Hyperopt: a python library for model selection and hyperparameter optimization. Computational Science $\&$ Discovery, 8(1), p.014008.
+
+    \bibitem{li2020massivelyparallelhyperparametertuning}
+    Li, L., Jamieson, K., Rostamizadeh, A., Gonina, E., Ben-Tzur, J., Hardt, M., Recht, B. and Talwalkar, A., 2020. A system for massively parallel hyperparameter tuning. Proceedings of machine learning and systems, 2, pp.230-246.
+
+    \bibitem{loshchilov2019decoupledweightdecayregularization}
+    Loshchilov, I. and Hutter, F., 2017. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101.
+
+    \bibitem{sangalli2016isogeometric}
+    Sangalli, G. and Tani, M., 2016. Isogeometric preconditioners based on fast solvers for the Sylvester equation. SIAM Journal on Scientific Computing, 38(6), pp.A3644-A3671.
+
+    \bibitem{gahalaut2019condition}
+    Gahalaut, K.P., Tomar, S.K. and Douglas, C., 2014. Condition number estimates for matrices arising in NURBS based isogeometric discretizations of elliptic partial differential equations. arXiv preprint arXiv:1406.6808.
+
+    \bibitem{trottenberg2000multigrid}
+    Trottenberg, U., Oosterlee, C.W. and Schuller, A., 2001. Multigrid methods. Academic press.
+
+    \bibitem{toselli2004domain}
+    Toselli, A. and Widlund, O., 2004. Domain decomposition methods-algorithms and theory (Vol. 34). Springer Science $\&$ Business Media.
+
+    \bibitem{lu2021learning}
+    Lu, L., Jin, P., Pang, G., Zhang, Z. and Karniadakis, G.E., 2021. Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators. Nature machine intelligence, 3(3), pp.218-229.
+
+    \bibitem{li2021fourier}
+    Li, Z., Kovachki, N., Azizzadenesheli, K., Liu, B., Bhattacharya, K., Stuart, A. and Anandkumar, A., 2020. Fourier neural operator for parametric partial differential equations. arXiv preprint arXiv:2010.08895.
+
+    \bibitem{rahaman2019spectral}
+    Rahaman, N., Baratin, A., Arpit, D., Draxler, F., Lin, M., Hamprecht, F., Bengio, Y. and Courville, A., 2019, May. On the spectral bias of neural networks. In International conference on machine learning (pp. 5301-5310). PMLR.
+
+    \bibitem{tielen2020pmultigrid}
+    Tielen, R.P.W.M., Möller, M., Göddeke, D. and Vuik, C., 2020. p-multigrid methods and their comparison to h-multigrid methods within Isogeometric Analysis. Computer Methods in Applied Mechanics and Engineering, 372, p.113347.
+
+    \bibitem{donatelli2015robust}
+    Donatelli, M., Garoni, C., Manni, C., Serra-Capizzano, S. and Speleers, H., 2015. Robust and optimal multi-iterative techniques for IgA Galerkin linear systems. Computer Methods in Applied Mechanics and Engineering, 284, pp.230--264.
+
+    \bibitem{hofreither2017robust}
+    Hofreither, C. and Takacs, S., 2017. Robust multigrid for isogeometric analysis based on stable splittings of spline spaces. SIAM Journal on Numerical Analysis, 55(4), pp.2004--2024.
+
+    \bibitem{dede2015isogeometric}
+    Dedè, L. and Quarteroni, A., 2015. Isogeometric analysis for second order partial differential equations on surfaces. Computer Methods in Applied Mechanics and Engineering, 284, pp.807--834.
+
+    \bibitem{dziuk2013finite}
+    Dziuk, G. and Elliott, C.M., 2013. Finite element methods for surface PDEs. Acta Numerica, 22, pp.289--396.
+
+    \bibitem{moller2026iganet}
+    Möller, M., Obermair, G., Singer, I., Gollmann, C., Reali, A. and Elgeti, S., 2026. IGANets: Isogeometric analysis networks and their applications to linear structural analysis problems. Engineering with Computers, 42(3), p.102.
+
+    \bibitem{karniadakis2025nonlinearprec}
+    Lee, Y., Liu, S., Darbon, J. and Karniadakis, G.E., 2025. A Neural-Operator Preconditioned Newton Method for Accelerated Nonlinear Solvers. arXiv preprint arXiv:2511.08811.
+
+    \bibitem{karniadakis2025nspod}
+    Levrero-Florencio, F., Lee, Y., Pathak, J. and Karniadakis, G.E., 2026. NSPOD: acceleratingthe convergence ofKrylov-based iterative linearsolvers via approximated PODs. arXiv preprint arXiv:2605.07828.
+
+\end{thebibliography}
+% \printbibliography
+
+\end{document}
