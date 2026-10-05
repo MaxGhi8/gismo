@@ -1558,43 +1558,43 @@ teapot surface.  The L-domain is never passed to the generator.  It is therefore
 an excluded geometry family, whereas a scaled Yeti is only a deformation of a
 known family.
 
-% \paragraph{One row of data.}
-% For each patch $k$, the generator assembles the local stiffness matrix and its
-% exact Schur complement $\Sloc{k}$ from~\eqref{eq:local-schur}.  A row contains
-% the geometry descriptor, a probe $\vect v\in\R^{s_k}$ and its exact label
-% $\Sloc{k}\vect v$, where $s_k$ is the number of active skeleton degrees of
-% freedom.  Geometry token $i$ is $(x_i,y_i,z_i,w_i)$: the physical Greville
-% coordinate and NURBS weight of free local basis function $i$; $z_i=0$ for the
-% planar domains.  Metadata record the configuration, patch, probe family,
-% number of free local functions and $s_k$.
+\paragraph{One row of data.}
+For each patch $k$, the generator assembles the local stiffness matrix and its
+exact Schur complement $\Sloc{k}$ from~\eqref{eq:local-schur}.  A row contains
+the geometry descriptor, a probe $\vect v\in\R^{s_k}$ and its exact label
+$\Sloc{k}\vect v$, where $s_k$ is the number of active skeleton degrees of
+freedom.  Geometry token $i$ is $(x_i,y_i,z_i,w_i)$: the physical Greville
+coordinate and NURBS weight of free local basis function $i$; $z_i=0$ for the
+planar domains.  Metadata record the configuration, patch, probe family,
+number of free local functions and $s_k$.
 
-% Every patch contributes exactly 96 rows.  Its first $s_k$ probes are the
-% canonical vectors $\vect e_1,\ldots,\vect e_{s_k}$, so all columns of
-% $\Sloc{k}$ are represented.  The remaining $96-s_k$ rows alternate between
-% independent standard-normal probes and Gaussian-random-field (GRF) probes.  At
-% physical skeleton points $\vect x_i$, the GRF covariance is
-% $\operatorname{Cov}(v_i,v_j)=\exp(-\|\vect x_i-\vect x_j\|/0.08)$, with unit
-% marginal variance and diagonal jitter $10^{-10}$.  Every probe is normalized
-% to unit Euclidean norm before its label is computed.  Over all 135 patch
-% instances this gives 12,960 rows: 3,376 canonical, 4,800 GRF and 4,784
-% independent probes.  Thus sampling is uniform per patch, not per geometry
-% configuration; configurations with more patches contribute more rows.
+Every patch contributes exactly 96 rows.  Its first $s_k$ probes are the
+canonical vectors $\vect e_1,\ldots,\vect e_{s_k}$, so all columns of
+$\Sloc{k}$ are represented.  The remaining $96-s_k$ rows alternate between
+independent standard-normal probes and Gaussian-random-field (GRF) probes.  At
+physical skeleton points $\vect x_i$, the GRF covariance is
+$\operatorname{Cov}(v_i,v_j)=\exp(-\|\vect x_i-\vect x_j\|/0.08)$, with unit
+marginal variance and diagonal jitter $10^{-10}$.  Every probe is normalized
+to unit Euclidean norm before its label is computed.  Over all 135 patch
+instances this gives 12,960 rows: 3,376 canonical, 4,800 GRF and 4,784
+independent probes.  Thus sampling is uniform per patch, not per geometry
+configuration; configurations with more patches contribute more rows.
 
-% \paragraph{Padding and data splits.}
-% The geometry, probe and label are zero-padded to 304 geometry tokens and 48
-% skeleton entries.  Since every physical NURBS weight is positive, $w_i=0$
-% identifies a padded token.  The mask $m_i=\mathbf 1_{\{w_i=0\}}$ removes such
-% tokens from Transformer self- and cross-attention; this matters for teapot
-% patches with only 30--36 free tokens and 14--20 skeleton entries.
+\paragraph{Padding and data splits.}
+The geometry, probe and label are zero-padded to 304 geometry tokens and 48
+skeleton entries.  Since every physical NURBS weight is positive, $w_i=0$
+identifies a padded token.  The mask $m_i=\mathbf 1_{\{w_i=0\}}$ removes such
+tokens from Transformer self- and cross-attention; this matters for teapot
+patches with only 30--36 free tokens and 14--20 skeleton entries.
 
-% A deterministic row permutation with seed zero is divided into 11,000
-% training, 960 validation and 1,000 test rows.  This split is not stratified by
-% geometry, and all 135 patch instances occur in all three subsets.  Consequently,
-% the reported test loss measures unseen probes $\vect v$ on known matrices
-% $\Sloc{k}$; it is not a geometry-generalization test.  Geometry transfer is
-% assessed separately by the $K=3$ and $K=12$ L-domain solver rows in
-% Table~\ref{tab:nn-geometry}, whose complete family is absent from dataset
-% generation, training, validation and row-wise testing.
+A deterministic row permutation with seed zero is divided into 11,000
+training, 960 validation and 1,000 test rows.  This split is not stratified by
+geometry, and all 135 patch instances occur in all three subsets.  Consequently,
+the reported test loss measures unseen probes $\vect v$ on known matrices
+$\Sloc{k}$; it is not a geometry-generalization test.  Geometry transfer is
+assessed separately by the $K=3$ and $K=12$ L-domain solver rows in
+Table~\ref{tab:nn-geometry}, whose complete family is absent from dataset
+generation, training, validation and row-wise testing.
 
 \begin{table}[ht]
     \centering
@@ -1657,269 +1657,269 @@ beneficial zero-shot transfer; that claim needs several excluded families.
 Figure~\ref{fig:nn-geometry} summarizes this geometry dependence and the
 corresponding residual histories.
 
-% \begin{figure}[ht]
-%  \centering
-%  \begin{subfigure}[b]{0.98\textwidth}
-%   \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_solver_comparison.pdf}
-%   \caption{Iterations and total solve time across geometries.}
-%  \end{subfigure}
-%  \par\medskip
-%  \begin{subfigure}[b]{0.82\textwidth}
-%   \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_convergence_histories.pdf}
-%   \caption{Held-out L-domain and teapot convergence.}
-%  \end{subfigure}
-%  \caption{Geometry comparison.  The logarithmic vertical scales expose both
-%  small planar solves and the severe Yeti-only failure on the teapot.}
-%  \label{fig:nn-geometry}
-% \end{figure}
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{0.98\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_solver_comparison.pdf}
+        \caption{Iterations and total solve time across geometries.}
+    \end{subfigure}
+    \par\medskip
+    \begin{subfigure}[b]{0.82\textwidth}
+        \includegraphics[width=\textwidth]{neural_results/geometry_transfer_20260716/figures/geometry_convergence_histories.pdf}
+        \caption{Held-out L-domain and teapot convergence.}
+    \end{subfigure}
+    \caption{Geometry comparison.  The logarithmic vertical scales expose both
+        small planar solves and the severe Yeti-only failure on the teapot.}
+    \label{fig:nn-geometry}
+\end{figure}
 
-% \subsection{Active spectral probes: training on what the model gets wrong}
-% \label{subsec:nn-active-spectral}
+\subsection{Active spectral probes: training on what the model gets wrong}
+\label{subsec:nn-active-spectral}
 
-% Random probes measure typical action error, whereas a few directions with
-% large multiplicative error can govern PCG.  We therefore train on spectral
-% directions selected by the current model.
+Random probes measure typical action error, whereas a few directions with
+large multiplicative error can govern PCG.  We therefore train on spectral
+directions selected by the current model.
 
-% For teapot patch $k$, existing canonical labels $\Sloc{k}\vect e_j$
-% reconstruct $\Sloc{k}$.  We solve
-% \begin{equation}
-%  \Sloc{k}\vect v_{k,j}=\mu_{k,j}M_{\theta,k}\vect v_{k,j}
-%  \label{eq:nn-active-local-eigenproblem}
-% \end{equation}
-% and rank positive eigenvalues by $|\log\mu_{k,j}|$, a symmetric multiplicative
-% error measure.  Round 1 mixes the eight worst vectors into 32 normalized
-% probes per patch, adding 1,024 exact-action rows to 3,072 original rows, then
-% trains the 400-epoch checkpoint for 150 epochs at $5\cdot10^{-5}$.
+For teapot patch $k$, existing canonical labels $\Sloc{k}\vect e_j$
+reconstruct $\Sloc{k}$.  We solve
+\begin{equation}
+    \Sloc{k}\vect v_{k,j}=\mu_{k,j}M_{\theta,k}\vect v_{k,j}
+    \label{eq:nn-active-local-eigenproblem}
+\end{equation}
+and rank positive eigenvalues by $|\log\mu_{k,j}|$, a symmetric multiplicative
+error measure.  Round 1 mixes the eight worst vectors into 32 normalized
+probes per patch, adding 1,024 exact-action rows to 3,072 original rows, then
+trains the 400-epoch checkpoint for 150 epochs at $5\cdot10^{-5}$.
 
-% The positive local spectrum contracts from $[0.9835,1.085]$ to
-% $[0.9928,1.010]$.  Round 2 uses 12 modes, 48 mixtures per patch and 100 epochs
-% at $2\cdot10^{-5}$; it lowers loss but not the PCG counts in
-% Table~\ref{tab:nn-teapot-active}.  The remaining defect is therefore not a
-% missing local direction.
+The positive local spectrum contracts from $[0.9835,1.085]$ to
+$[0.9928,1.010]$.  Round 2 uses 12 modes, 48 mixtures per patch and 100 epochs
+at $2\cdot10^{-5}$; it lowers loss but not the PCG counts in
+Table~\ref{tab:nn-teapot-active}.  The remaining defect is therefore not a
+missing local direction.
 
-% \subsection{The remaining error is global: an adaptive spectral coarse space}
-% \label{subsec:nn-global-correction}
+\subsection{The remaining error is global: an adaptive spectral coarse space}
+\label{subsec:nn-global-correction}
 
-% PCG sees the assembled interface equation $\Fschur\lagmult=\gschur$, not
-% isolated patches.  We therefore correct its few poorly scaled global modes.
+PCG sees the assembled interface equation $\Fschur\lagmult=\gschur$, not
+isolated patches.  We therefore correct its few poorly scaled global modes.
 
-% Let $\mathcal P_0\in\R^{\Lambda\times\Lambda}$ denote the assembled symmetric
-% positive-semidefinite neural preconditioner before this correction, where
-% $\Lambda$ is the number of Lagrange multipliers.  On the positive interface
-% subspace, define the symmetric preconditioned operator
-% \begin{equation}
-%  H=\mathcal P_0^{1/2}\Fschur\mathcal P_0^{1/2},
-%  \qquad H\vect z_i=\lambda_i\vect z_i,
-%  \qquad \vect z_i^\top\vect z_j=\delta_{ij}.
-%  \label{eq:nn-global-spectrum}
-% \end{equation}
-% Zero eigenvalues caused by redundant multiplier representations are omitted.
-% Let $I_q$ contain the indices of the $q$ positive eigenvalues with largest
-% $|\log\lambda_i|$, let $Z_q$ collect their eigenvectors, and define
-% \begin{equation}
-%  W_q=\mathcal P_0^{1/2}Z_q,
-%  \qquad
-%  D_q=\operatorname{diag}_{i\in I_q}(\lambda_i^{-1}-1),
-%  \qquad
-%  \mathcal P_q=\mathcal P_0+W_qD_qW_q^\top.
-%  \label{eq:nn-global-correction}
-% \end{equation}
-% Here $q$ is the global correction rank.  Only its selected directions change;
-% for $\vect w_i=\mathcal P_0^{1/2}\vect z_i$,
-% $\mathcal P_q\Fschur\vect w_i=\vect w_i$.  Moreover,
-% \begin{equation}
-%  \mathcal P_q=\mathcal P_0^{1/2}
-%  \left[I+Z_qD_qZ_q^\top\right]\mathcal P_0^{1/2}
-%  \label{eq:nn-global-correction-spd}
-% \end{equation}
-% is positive semidefinite: the middle eigenvalues are $\lambda_i^{-1}>0$ on
-% the selected space and one elsewhere.  Standard PCG still applies, with two
-% thin products per action.
+Let $\mathcal P_0\in\R^{\Lambda\times\Lambda}$ denote the assembled symmetric
+positive-semidefinite neural preconditioner before this correction, where
+$\Lambda$ is the number of Lagrange multipliers.  On the positive interface
+subspace, define the symmetric preconditioned operator
+\begin{equation}
+    H=\mathcal P_0^{1/2}\Fschur\mathcal P_0^{1/2},
+    \qquad H\vect z_i=\lambda_i\vect z_i,
+    \qquad \vect z_i^\top\vect z_j=\delta_{ij}.
+    \label{eq:nn-global-spectrum}
+\end{equation}
+Zero eigenvalues caused by redundant multiplier representations are omitted.
+Let $I_q$ contain the indices of the $q$ positive eigenvalues with largest
+$|\log\lambda_i|$, let $Z_q$ collect their eigenvectors, and define
+\begin{equation}
+    W_q=\mathcal P_0^{1/2}Z_q,
+    \qquad
+    D_q=\operatorname{diag}_{i\in I_q}(\lambda_i^{-1}-1),
+    \qquad
+    \mathcal P_q=\mathcal P_0+W_qD_qW_q^\top.
+    \label{eq:nn-global-correction}
+\end{equation}
+Here $q$ is the global correction rank.  Only its selected directions change;
+for $\vect w_i=\mathcal P_0^{1/2}\vect z_i$,
+$\mathcal P_q\Fschur\vect w_i=\vect w_i$.  Moreover,
+\begin{equation}
+    \mathcal P_q=\mathcal P_0^{1/2}
+    \left[I+Z_qD_qZ_q^\top\right]\mathcal P_0^{1/2}
+    \label{eq:nn-global-correction-spd}
+\end{equation}
+is positive semidefinite: the middle eigenvalues are $\lambda_i^{-1}>0$ on
+the selected space and one elsewhere.  Standard PCG still applies, with two
+thin products per action.
 
-% The full-spectrum construction materializes $\Fschur$ and diagonalizes $H$;
-% it is diagnostic, not scalable.  The randomized Ritz construction avoids
-% materializing $\Fschur$.  With oversampling $s$, random
-% $\Omega\in\R^{\Lambda\times(q+s)}$ and $m$ block-power steps, it forms
-% \begin{equation}
-%  Q_m=\operatorname{orth}(H^m\Omega),\qquad
-%  B_m=Q_m^\top H Q_m.
-%  \label{eq:nn-randomized-ritz}
-% \end{equation}
-% where $\operatorname{orth}(X)$ spans $X$ with orthonormal columns.  Eigenpairs
-% $(\widetilde\lambda_i,\vect y_i)$ of $B_m$ give
-% $\widetilde{\vect z}_i=Q_m\vect y_i$ for Eq.~\eqref{eq:nn-global-correction}.
-% Applications of $H$ use matrix-free $\Fschur$ actions; teapot parameters
-% $(q,s,m)=(32,16,4)$ require 240 during setup.
+The full-spectrum construction materializes $\Fschur$ and diagonalizes $H$;
+it is diagnostic, not scalable.  The randomized Ritz construction avoids
+materializing $\Fschur$.  With oversampling $s$, random
+$\Omega\in\R^{\Lambda\times(q+s)}$ and $m$ block-power steps, it forms
+\begin{equation}
+    Q_m=\operatorname{orth}(H^m\Omega),\qquad
+    B_m=Q_m^\top H Q_m.
+    \label{eq:nn-randomized-ritz}
+\end{equation}
+where $\operatorname{orth}(X)$ spans $X$ with orthonormal columns.  Eigenpairs
+$(\widetilde\lambda_i,\vect y_i)$ of $B_m$ give
+$\widetilde{\vect z}_i=Q_m\vect y_i$ for Eq.~\eqref{eq:nn-global-correction}.
+Applications of $H$ use matrix-free $\Fschur$ actions; teapot parameters
+$(q,s,m)=(32,16,4)$ require 240 during setup.
 
-% The prototype still forms $\mathcal P_0^{1/2}$ densely, so only its
-% $\Fschur$ applications are matrix-free.  All construction cost is excluded
-% from solve time.  The correction is reusable across right-hand sides for a
-% fixed geometry, discretization and coefficient.
+The prototype still forms $\mathcal P_0^{1/2}$ densely, so only its
+$\Fschur$ applications are matrix-free.  All construction cost is excluded
+from solve time.  The correction is reusable across right-hand sides for a
+fixed geometry, discretization and coefficient.
 
-% \subsection{Teapot improvement and ablations}
+\subsection{Teapot improvement and ablations}
 
-% Table~\ref{tab:nn-teapot-active} isolates the gains: fine-tuning stays at 20
-% steps, active probes match scaled Dirichlet at 19, and rank-32 Ritz reaches
-% 10 steps for $m=4$ and 9 for $m=6$.  Full-spectrum diagnostics reach 6 steps
-% at $q=40$ and 5 at $q=64$.  Times average 100 solves, include low-rank
-% products, and exclude setup; Figure~\ref{fig:nn-teapot-active-rank} shows the
-% full-spectrum rank trade-off.
+Table~\ref{tab:nn-teapot-active} isolates the gains: fine-tuning stays at 20
+steps, active probes match scaled Dirichlet at 19, and rank-32 Ritz reaches
+10 steps for $m=4$ and 9 for $m=6$.  Full-spectrum diagnostics reach 6 steps
+at $q=40$ and 5 at $q=64$.  Times average 100 solves, include low-rank
+products, and exclude setup; Figure~\ref{fig:nn-teapot-active-rank} shows the
+full-spectrum rank trade-off.
 
-% \begin{table}[ht]
-%  \centering
-%  \caption{Teapot at $(p,r)=(2,2)$, $K=32$, $\Lambda=256$ and tolerance
-%  $10^{-8}$.  $q$ is the global correction rank and $m$ the randomized power
-%  count.  Time is total solve-only time; all setup is excluded.}
-%  \label{tab:nn-teapot-active}
-%  \small
-%  \begin{tabular}{lcrrr}
-%   \toprule
-%   Local model / global construction & $(q,m)$ & $T_{\rm solve}$ [ms] & iters & $\widehat\kappa$ \\
-%   \midrule
-%   None & -- & 1.916 & 37 & 23.29 \\
-%   Geometry-diverse & $(0,{-})$ & 1.766 & 20 & 5.92 \\
-%   Ordinary teapot fine-tune & $(0,{-})$ & 1.453 & 20 & 5.76 \\
-%   Active spectral, round 1 & $(0,{-})$ & 1.384 & 19 & 5.72 \\
-%   Active spectral, round 2 & $(0,{-})$ & 1.401 & 19 & 5.72 \\
-%   Active + randomized Ritz & $(32,4)$ & 0.775 & 10 & 1.69 \\
-%   Active + randomized Ritz & $(32,6)$ & 0.704 & 9 & 1.58 \\
-%   Active + full spectrum & $(32,{-})$ & 0.634 & 8 & 1.38 \\
-%   Active + full spectrum & $(40,{-})$ & 0.489 & 6 & 1.19 \\
-%   Active + full spectrum & $(64,{-})$ & \textbf{0.424} & \textbf{5} & \textbf{1.06} \\
-%   Scaled Dirichlet & -- & 1.390 & 19 & 5.72 \\
-%   \bottomrule
-%  \end{tabular}
-% \end{table}
+\begin{table}[ht]
+    \centering
+    \caption{Teapot at $(p,r)=(2,2)$, $K=32$, $\Lambda=256$ and tolerance
+        $10^{-8}$.  $q$ is the global correction rank and $m$ the randomized power
+        count.  Time is total solve-only time; all setup is excluded.}
+    \label{tab:nn-teapot-active}
+    \small
+    \begin{tabular}{lcrrr}
+        \toprule
+        Local model / global construction & $(q,m)$    & $T_{\rm solve}$ [ms] & iters      & $\widehat\kappa$ \\
+        \midrule
+        None                              & --         & 1.916                & 37         & 23.29            \\
+        Geometry-diverse                  & $(0,{-})$  & 1.766                & 20         & 5.92             \\
+        Ordinary teapot fine-tune         & $(0,{-})$  & 1.453                & 20         & 5.76             \\
+        Active spectral, round 1          & $(0,{-})$  & 1.384                & 19         & 5.72             \\
+        Active spectral, round 2          & $(0,{-})$  & 1.401                & 19         & 5.72             \\
+        Active + randomized Ritz          & $(32,4)$   & 0.775                & 10         & 1.69             \\
+        Active + randomized Ritz          & $(32,6)$   & 0.704                & 9          & 1.58             \\
+        Active + full spectrum            & $(32,{-})$ & 0.634                & 8          & 1.38             \\
+        Active + full spectrum            & $(40,{-})$ & 0.489                & 6          & 1.19             \\
+        Active + full spectrum            & $(64,{-})$ & \textbf{0.424}       & \textbf{5} & \textbf{1.06}    \\
+        Scaled Dirichlet                  & --         & 1.390                & 19         & 5.72             \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-% \begin{figure}[ht]
-%  \centering
-%  \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_active_spectral_rank.pdf}
-%  \caption{Teapot rank convergence.  Active probes improve the uncorrected
-%  endpoint, while the interface-wide correction produces the large reduction
-%  in iterations, total solve time and condition estimate.  Dashed lines are
-%  scaled Dirichlet; all curves use the full-spectrum construction so that only
-%  the local checkpoint and rank vary.}
-%  \label{fig:nn-teapot-active-rank}
-% \end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_active_spectral_rank.pdf}
+    \caption{Teapot rank convergence.  Active probes improve the uncorrected
+        endpoint, while the interface-wide correction produces the large reduction
+        in iterations, total solve time and condition estimate.  Dashed lines are
+        scaled Dirichlet; all curves use the full-spectrum construction so that only
+        the local checkpoint and rank vary.}
+    \label{fig:nn-teapot-active-rank}
+\end{figure}
 
-% Figure~\ref{fig:nn-teapot-ritz} shows that larger $m$ captures more important
-% modes and approaches the full-spectrum residual curve.  The correction cannot
-% rescue a poor local model: Yeti-only takes 102 teapot steps and still 50 after
-% rank-32 full-spectrum correction.  Diverse local training remains necessary.
+Figure~\ref{fig:nn-teapot-ritz} shows that larger $m$ captures more important
+modes and approaches the full-spectrum residual curve.  The correction cannot
+rescue a poor local model: Yeti-only takes 102 teapot steps and still 50 after
+rank-32 full-spectrum correction.  Diverse local training remains necessary.
 
-% \begin{figure}[ht]
-%  \centering
-%  \includegraphics[width=0.82\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_ritz_convergence.pdf}
-%  \caption{Teapot relative residual histories.  ``Active local only'' has
-%  $q=0$; the three randomized curves have $q=32$ and respectively 2, 4 and 6
-%  block-power steps.  The full-spectrum rank-32 curve is a diagnostic reference.}
-%  \label{fig:nn-teapot-ritz}
-% \end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.82\textwidth]{neural_results/adaptive_spectral_20260716/figures/teapot_ritz_convergence.pdf}
+    \caption{Teapot relative residual histories.  ``Active local only'' has
+        $q=0$; the three randomized curves have $q=32$ and respectively 2, 4 and 6
+        block-power steps.  The full-spectrum rank-32 curve is a diagnostic reference.}
+    \label{fig:nn-teapot-ritz}
+\end{figure}
 
-% \subsection{Refinement and geometry controls}
+\subsection{Refinement and geometry controls}
 
-% On Yeti $(p,r)=(2,2)$, correction reduces 17 iterations to 7 at $q=32$ and 6
-% at $q=40$, versus 14 for scaled Dirichlet.  At $(2,3)$, rank-96 Ritz improves
-% the fine model's 26 steps to 13 and beats scaled Dirichlet's 16; the
-% full-spectrum $q=256$ row halves its solve time.  The larger rank accompanies
-% the doubled interface size, $\Lambda=768$ versus 384.  Table~\ref{tab:nn-refined-correction}
-% reports the values and Figure~\ref{fig:nn-finegrid-correction} their rank trend.
+On Yeti $(p,r)=(2,2)$, correction reduces 17 iterations to 7 at $q=32$ and 6
+at $q=40$, versus 14 for scaled Dirichlet.  At $(2,3)$, rank-96 Ritz improves
+the fine model's 26 steps to 13 and beats scaled Dirichlet's 16; the
+full-spectrum $q=256$ row halves its solve time.  The larger rank accompanies
+the doubled interface size, $\Lambda=768$ versus 384.  Table~\ref{tab:nn-refined-correction}
+reports the values and Figure~\ref{fig:nn-finegrid-correction} their rank trend.
 
-% \begin{table}[ht]
-%  \centering
-%  \caption{Yeti specialist and refined-grid controls at tolerance $10^{-8}$.
-%  Total solve time excludes setup.  ``Ritz $m$'' uses the randomized
-%  construction with $m$ power steps; ``full'' uses the full-spectrum reference.}
-%  \label{tab:nn-refined-correction}
-%  \small
-%  \begin{tabular}{cclrrr}
-%   \toprule
-%   $(p,r)$ & $\Lambda$ & method & $q$ & $T_{\rm solve}$ [ms] & iters \\
-%   \midrule
-%   $(2,2)$ & 384 & specialist neural & 0 & 7.822 & 17 \\
-%           &     & specialist + full & 16 & 4.400 & 9 \\
-%           &     & specialist + full & 32 & 3.517 & 7 \\
-%           &     & specialist + full & 40 & \textbf{3.034} & \textbf{6} \\
-%           &     & scaled Dirichlet & -- & 6.491 & 14 \\
-%           &     & none & -- & 13.746 & 32 \\
-%   \midrule
-%   $(2,3)$ & 768 & fine neural & 0 & 69.024 & 26 \\
-%           &     & fine + Ritz $m=4$ & 96 & 39.240 & 14 \\
-%           &     & fine + Ritz $m=6$ & 96 & 36.775 & 13 \\
-%           &     & fine + full & 96 & 41.722 & 15 \\
-%           &     & fine + full & 192 & 34.200 & 12 \\
-%           &     & fine + full & 256 & \textbf{21.706} & \textbf{7} \\
-%           &     & scaled Dirichlet & -- & 43.949 & 16 \\
-%           &     & none & -- & 116.019 & 46 \\
-%   \bottomrule
-%  \end{tabular}
-% \end{table}
+\begin{table}[ht]
+    \centering
+    \caption{Yeti specialist and refined-grid controls at tolerance $10^{-8}$.
+        Total solve time excludes setup.  ``Ritz $m$'' uses the randomized
+        construction with $m$ power steps; ``full'' uses the full-spectrum reference.}
+    \label{tab:nn-refined-correction}
+    \small
+    \begin{tabular}{cclrrr}
+        \toprule
+        $(p,r)$ & $\Lambda$ & method            & $q$ & $T_{\rm solve}$ [ms] & iters      \\
+        \midrule
+        $(2,2)$ & 384       & specialist neural & 0   & 7.822                & 17         \\
+                &           & specialist + full & 16  & 4.400                & 9          \\
+                &           & specialist + full & 32  & 3.517                & 7          \\
+                &           & specialist + full & 40  & \textbf{3.034}       & \textbf{6} \\
+                &           & scaled Dirichlet  & --  & 6.491                & 14         \\
+                &           & none              & --  & 13.746               & 32         \\
+        \midrule
+        $(2,3)$ & 768       & fine neural       & 0   & 69.024               & 26         \\
+                &           & fine + Ritz $m=4$ & 96  & 39.240               & 14         \\
+                &           & fine + Ritz $m=6$ & 96  & 36.775               & 13         \\
+                &           & fine + full       & 96  & 41.722               & 15         \\
+                &           & fine + full       & 192 & 34.200               & 12         \\
+                &           & fine + full       & 256 & \textbf{21.706}      & \textbf{7} \\
+                &           & scaled Dirichlet  & --  & 43.949               & 16         \\
+                &           & none              & --  & 116.019              & 46         \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-% \begin{figure}[ht]
-%  \centering
-%  \includegraphics[width=0.94\textwidth]{neural_results/adaptive_spectral_20260716/figures/finegrid_spectral_rank.pdf}
-%  \caption{Correction-rank convergence on the refined Yeti.  Diamonds are the
-%  rank-96 randomized Ritz constructions with 4 and 6 power steps; the line is
-%  the full-spectrum rank diagnostic.  Every point includes correction-application
-%  cost in the total solve time and excludes construction setup.}
-%  \label{fig:nn-finegrid-correction}
-% \end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.94\textwidth]{neural_results/adaptive_spectral_20260716/figures/finegrid_spectral_rank.pdf}
+    \caption{Correction-rank convergence on the refined Yeti.  Diamonds are the
+        rank-96 randomized Ritz constructions with 4 and 6 power steps; the line is
+        the full-spectrum rank diagnostic.  Every point includes correction-application
+        cost in the total solve time and excludes construction setup.}
+    \label{fig:nn-finegrid-correction}
+\end{figure}
 
-% Table~\ref{tab:nn-geometry-correction} rebuilds a full-spectrum rank-32 space
-% for each geometry.  It beats scaled Dirichlet in time and iterations in every
-% case, including the held-out L-domain and teapot, but is not zero-cost
-% transfer.  For the three smallest systems, $q=32$ spans the full positive
-% interface space, so one-step convergence is not a low-rank scalability result.
-% Figure~\ref{fig:nn-geometry-correction} displays the same cross-geometry trend.
+Table~\ref{tab:nn-geometry-correction} rebuilds a full-spectrum rank-32 space
+for each geometry.  It beats scaled Dirichlet in time and iterations in every
+case, including the held-out L-domain and teapot, but is not zero-cost
+transfer.  For the three smallest systems, $q=32$ spans the full positive
+interface space, so one-step convergence is not a low-rank scalability result.
+Figure~\ref{fig:nn-geometry-correction} displays the same cross-geometry trend.
 
-% \begin{table}[ht]
-%  \centering
-%  \caption{Geometry control at $(p,r)=(2,2)$.  Entries are total solve time in
-%  milliseconds / PCG iterations; setup is excluded.  ``Diverse+$q32$'' uses a
-%  geometry-specific full-spectrum rank-32 correction.}
-%  \label{tab:nn-geometry-correction}
-%  \small
-%  \begin{tabular}{lccc}
-%   \toprule
-%   Geometry & none & scaled Dirichlet & diverse + $q32$ \\
-%   \midrule
-%   Yeti, $K=21$ & 14.575 / 32 & 6.500 / 14 & \textbf{6.294 / 13} \\
-%   Lake, $K=4$ & 0.051 / 13 & 0.030 / 6 & \textbf{0.008 / 1} \\
-%   Lake, $K=16$ & 0.493 / 25 & 0.349 / 14 & \textbf{0.165 / 6} \\
-%   Square, $K=4$ & 0.047 / 12 & 0.021 / 4 & \textbf{0.008 / 1} \\
-%   Square, $K=16$ & 0.417 / 21 & 0.303 / 12 & \textbf{0.140 / 5} \\
-%   L-domain, $K=3$ (held out) & 0.021 / 8 & 0.017 / 5 & \textbf{0.006 / 1} \\
-%   L-domain, $K=12$ (held out) & 0.251 / 19 & 0.184 / 11 & \textbf{0.156 / 9} \\
-%   Teapot, $K=32$ & 1.923 / 37 & 1.384 / 19 & \textbf{0.704 / 9} \\
-%   \bottomrule
-%  \end{tabular}
-% \end{table}
+\begin{table}[ht]
+    \centering
+    \caption{Geometry control at $(p,r)=(2,2)$.  Entries are total solve time in
+        milliseconds / PCG iterations; setup is excluded.  ``Diverse+$q32$'' uses a
+        geometry-specific full-spectrum rank-32 correction.}
+    \label{tab:nn-geometry-correction}
+    \small
+    \begin{tabular}{lccc}
+        \toprule
+        Geometry                    & none        & scaled Dirichlet & diverse + $q32$     \\
+        \midrule
+        Yeti, $K=21$                & 14.575 / 32 & 6.500 / 14       & \textbf{6.294 / 13} \\
+        Lake, $K=4$                 & 0.051 / 13  & 0.030 / 6        & \textbf{0.008 / 1}  \\
+        Lake, $K=16$                & 0.493 / 25  & 0.349 / 14       & \textbf{0.165 / 6}  \\
+        Square, $K=4$               & 0.047 / 12  & 0.021 / 4        & \textbf{0.008 / 1}  \\
+        Square, $K=16$              & 0.417 / 21  & 0.303 / 12       & \textbf{0.140 / 5}  \\
+        L-domain, $K=3$ (held out)  & 0.021 / 8   & 0.017 / 5        & \textbf{0.006 / 1}  \\
+        L-domain, $K=12$ (held out) & 0.251 / 19  & 0.184 / 11       & \textbf{0.156 / 9}  \\
+        Teapot, $K=32$              & 1.923 / 37  & 1.384 / 19       & \textbf{0.704 / 9}  \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-% \begin{figure}[ht]
-%  \centering
-%  \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/geometry_spectral_comparison.pdf}
-%  \caption{Iteration counts and total solve-only times across geometry families.
-%  The held-out label refers to absence from neural training; the rank-32 space
-%  itself is adapted to each assembled operator during setup.}
-%  \label{fig:nn-geometry-correction}
-% \end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{neural_results/adaptive_spectral_20260716/figures/geometry_spectral_comparison.pdf}
+    \caption{Iteration counts and total solve-only times across geometry families.
+        The held-out label refers to absence from neural training; the rank-32 space
+        itself is adapted to each assembled operator during setup.}
+    \label{fig:nn-geometry-correction}
+\end{figure}
 
-% \FloatBarrier
+\FloatBarrier
 
-% \subsection{What has and has not been achieved}
+\subsection{What has and has not been achieved}
 
-% Active probes match scaled Dirichlet on the teapot at 19 iterations.  The
-% remaining error is interface-wide: rank-32 Ritz gives 9--10 iterations, while
-% the full-spectrum diagnostic reaches 5.  The correction also improves Yeti,
-% its $(2,3)$ discretization and the held-out planar family; on the fine grid,
-% rank-96 Ritz beats scaled Dirichlet in iterations and solve time.
+Active probes match scaled Dirichlet on the teapot at 19 iterations.  The
+remaining error is interface-wide: rank-32 Ritz gives 9--10 iterations, while
+the full-spectrum diagnostic reaches 5.  The correction also improves Yeti,
+its $(2,3)$ discretization and the held-out planar family; on the fine grid,
+rank-96 Ritz beats scaled Dirichlet in iterations and solve time.
 
-% The limits remain: full-spectrum rows use exact assembled information; Ritz
-% still forms $\mathcal P_0^{1/2}$ densely; all setup is excluded; only one
-% geometry family is fully held out; and $\alpha=1$ throughout.  Scalability
-% therefore requires matrix-free square-root actions, more held-out geometry and
-% coefficient families, and amortized setup studies.  Within solve-only timing,
-% the combined method improves both convergence and wall time.
+The limits remain: full-spectrum rows use exact assembled information; Ritz
+still forms $\mathcal P_0^{1/2}$ densely; all setup is excluded; only one
+geometry family is fully held out; and $\alpha=1$ throughout.  Scalability
+therefore requires matrix-free square-root actions, more held-out geometry and
+coefficient families, and amortized setup studies.  Within solve-only timing,
+the combined method improves both convergence and wall time.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -98,15 +98,26 @@ def exact_matrix(
     output_columns: list[str],
     size: int,
 ) -> np.ndarray:
-    canonical = rows[rows["probe_family"] == 2]
-    probes = canonical[rhs_columns[:size]].to_numpy(dtype=np.float64)
-    actions = canonical[output_columns[:size]].to_numpy(dtype=np.float64)
-    if len(canonical) != size or np.linalg.matrix_rank(probes) != size:
+    if "probe_family" in rows:
+        canonical = rows[rows["probe_family"] == 2]
+        probes = canonical[rhs_columns[:size]].to_numpy(dtype=np.float64)
+        actions = canonical[output_columns[:size]].to_numpy(dtype=np.float64)
+        if len(canonical) == size and np.linalg.matrix_rank(probes) == size:
+            matrix = np.linalg.solve(probes, actions).T
+            matrix = 0.5 * (matrix + matrix.T)
+            return matrix.astype(np.float32)
+
+    # Datasets generated before the canonical sweep store only random probes.
+    # Each row is still an exact action, so the operator is determined by the
+    # least-squares solution of S V = Y over every probe of the patch.
+    probes = rows[rhs_columns[:size]].to_numpy(dtype=np.float64)
+    actions = rows[output_columns[:size]].to_numpy(dtype=np.float64)
+    if len(probes) < size or np.linalg.matrix_rank(probes) != size:
         raise ValueError(
-            f"Need exactly {size} independent canonical probes, found "
-            f"{len(canonical)}"
+            f"Need at least {size} independent probes, found {len(probes)} "
+            f"of rank {np.linalg.matrix_rank(probes)}"
         )
-    matrix = np.linalg.solve(probes, actions).T
+    matrix = np.linalg.lstsq(probes, actions, rcond=None)[0].T
     matrix = 0.5 * (matrix + matrix.T)
     return matrix.astype(np.float32)
 

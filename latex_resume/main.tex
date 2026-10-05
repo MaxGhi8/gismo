@@ -32,7 +32,7 @@
 \newcommand{\al}[1]{}
 \newcommand{\alinline}[1]{}
 
-\title{A Spectrally Calibrated Geometry-Conditioned Neural IETI-DP Preconditioner}
+\title{Neural preconditioning}
 \date{}
 \author[1]{Massimiliano Ghiotto}
 \author[2]{Alessandro Lucantonio}
@@ -755,60 +755,41 @@ untouched teapot solve is the whole-family test.
 \subsection{Adaptive interface correction}
 \label{subsec:mf-ritz}
 
-Local accuracy does not guarantee that the assembled preconditioned operator
-$P_0\Fschur$ has no isolated extreme eigenvalues.  For interfaces larger than
-16, we approximate their invariant subspace by a randomized Ritz construction
-that calls only $P_0$ and~$\Fschur$.  It does not assemble either operator,
-compute $\Fschur^{-1}$, or form a dense square root of~$P_0$.
+A local operator that is accurate patch by patch can still leave a handful of
+badly scaled directions in the assembled interface problem, and PCG pays for
+each of them.  This section removes those directions, and only those.
 
-Let $q$ be the correction rank, $\ell_s\ge q$ the total sketch dimension,
-$m+1$ the requested Krylov depth, and
-$b=\min\{\ell_s,\max(4,\lceil\ell_s/(m+1)\rceil)\}$ the block width.  Recall that
-$\Fschur\in\R^{\Lambda\times\Lambda}$, i.e.\ $\Lambda$ is the number of Lagrange
-multipliers.  Draw a random $W_0\in\R^{\Lambda\times b}$ and initialize the paired
-block
+\paragraph{What is corrected.}
+Let $P_0$ be the preconditioner built so far, and consider the eigenpairs of
+the preconditioned interface operator,
 \begin{equation}
-    Z_0=P_0W_0 .
+    P_0\Fschur\,\vect y_i=\lambda_i\vect y_i .
+    \label{eq:journal-preconditioned-eigenpair}
 \end{equation}
-The operator $A=P_0\Fschur$ is self-adjoint in the $P_0^{-1}$ inner product.
-Moreover, from a pair $Z_j=P_0W_j$ we can form the next pair using only
-ordinary operator applications,
+PCG converges quickly when the $\lambda_i$ cluster at one.  A direction with
+$\lambda_i$ far from one, in either direction, typically costs an iteration
+whatever the remaining spectrum looks like.  Rather than rebuild $P_0$, we
+rescale each such direction individually.
+
+\paragraph{The correction.}
+Suppose $q$ offending directions are known, normalized so that
+$\vect y_i^\top P_0^{-1}\vect y_j=\delta_{ij}$.  Since $P_0$ already
+contributes a factor $\lambda_i$ along $\vect y_i$, restoring that direction to
+one requires topping it up by $\lambda_i^{-1}-1$.  Adding one rank-one term
+per direction gives
 \begin{equation}
-    \widetilde W_{j+1}=\Fschur Z_j,\qquad
-    \widetilde Z_{j+1}=P_0\widetilde W_{j+1}.
-    \label{eq:journal-block-krylov}
-\end{equation}
-Each new pair is orthogonalized twice against the retained pairs and normalized
-so that $Z_i^\top W_j=\delta_{ij}I$.  These inner products are available from
-the small cross-Gram matrices; neither $P_0^{-1}$ nor $P_0^{1/2}$ is applied.
-We retain blocks until the concatenated matrices $Z$ and $W$ have at most
-$\ell_s$ columns.  Thus $Z^\top W=I$ and $Z$ spans a block-Krylov space for
-$A$~\cite{saad2003iterative}.  Keeping all powers, rather than only the last
-power-iteration block, allows Rayleigh--Ritz to approximate both ends of the
-spectrum.  We solve the
-at-most $\ell_s$ dimensional symmetric problem
-\begin{equation}
-    (Z^\top\Fschur Z)c_i=\lambda_i c_i.
-    \label{eq:journal-ritz}
-\end{equation}
-For a Ritz pair, set $y_i=Zc_i$, $w_i=Wc_i$, and
-\[
-    \vect r_i=\Fschur y_i-\lambda_iw_i,\qquad
-    \eta_i=\frac{(\vect r_i^\top P_0\vect r_i)^{1/2}}
-    {|\lambda_i|}.
-\]
-The numerator is the residual norm associated with the
-$P_0^{-1}$-self-adjoint eigenproblem and is computable using one additional
-$P_0$ application.  We discard numerically nonpositive modes (those with
-$\lambda_i$ below a relative threshold $\max\{10^{-8},10^{-4}\max_j|\lambda_j|\}$)
-and candidates with $\eta_i>0.2$, then retain at most $q$ accepted values with
-largest $|\log\lambda_i|$.  With $Y=[y_1,\ldots,y_q]$ for the retained modes, the final
-preconditioner is
-\begin{equation}
-    P_q=P_0+Y\operatorname{diag}(\lambda_1^{-1}-1,\ldots,
-    \lambda_q^{-1}-1)Y^\top.
+    P_q=P_0+\sum_{i=1}^{q}\bigl(\lambda_i^{-1}-1\bigr)\vect y_i\vect y_i^\top
+    =P_0+Y\operatorname{diag}\bigl(\lambda_1^{-1}-1,\ldots,
+    \lambda_q^{-1}-1\bigr)Y^\top,
     \label{eq:journal-correction}
 \end{equation}
+with $Y=[\vect y_1,\ldots,\vect y_q]$.  The normalization is what keeps the
+terms from interfering: each one acts on its own direction and leaves the
+others untouched.  Because the corrected directions are chosen from the
+spectrum rather than from the mesh, $\spann(Y)$ plays the role of a coarse
+space that is selected after seeing what $P_0$ actually got wrong, in contrast
+with the primal space of Section~\ref{subsec:ieti}, which is fixed in advance
+by the geometry.
 
 \begin{prop}[Positive definiteness and exact action on an invariant subspace]
     \label{prop:journal-spd}
@@ -819,55 +800,165 @@ preconditioner is
     $P_q\Fschur$ equal one.
 \end{prop}
 \begin{proof}
-    Complete $Y$ to a $P_0^{-1}$-orthogonal basis.  In this basis, the contribution
-    of $P_0$ on $\spann(Y)$ is $YY^\top$.  Equation~\eqref{eq:journal-correction}
-    replaces it by
-    $Y\operatorname{diag}(\lambda_i^{-1})Y^\top$, which is positive definite
-    because $\lambda_i>0$, and leaves the positive complementary block unchanged.
-    Moreover, $\Fschur y_i=\lambda_iP_0^{-1}y_i$ gives $Y^\top\Fschur y_i=\lambda_ie_i$,
-    hence
-    $P_q\Fschur y_i=\lambda_i y_i+\lambda_i(\lambda_i^{-1}-1)y_i=y_i$.
+    Complete $Y$ to a $P_0^{-1}$-orthogonal basis.  In this basis the
+    contribution of $P_0$ on $\spann(Y)$ is $YY^\top$, which
+    \eqref{eq:journal-correction} replaces by
+    $Y\operatorname{diag}(\lambda_i^{-1})Y^\top$; this is positive definite
+    because $\lambda_i>0$, and the complementary block is unchanged.  For the
+    second claim, \eqref{eq:journal-preconditioned-eigenpair} gives
+    $\Fschur\vect y_i=\lambda_iP_0^{-1}\vect y_i$, hence
+    $Y^\top\Fschur\vect y_i=\lambda_i\vect e_i$ and
+    $P_q\Fschur\vect y_i=\lambda_i\vect y_i
+        +\lambda_i(\lambda_i^{-1}-1)\vect y_i=\vect y_i$.
 \end{proof}
 
-The normalization hypothesis is met by construction: the retained blocks satisfy
-$Z^\top W=Z^\top P_0^{-1}Z=I$ and the Ritz coefficient vectors $c_i$ are
-Euclidean-orthonormal, so $Y=Z[c_1,\ldots,c_q]$ obeys $Y^\top P_0^{-1}Y=I$.
-In the deterministic branch below the same holds with $y_i=P_0^{1/2}v_i$ for the
-Euclidean-orthonormal eigenvectors $v_i$ of $P_0^{1/2}\Fschur P_0^{1/2}$.
+\paragraph{Finding the directions without assembling anything.}
+The eigenvectors in \eqref{eq:journal-correction} are not available: $\Fschur$
+is a Schur complement, so applying it already costs one local solve per patch,
+and assembling it, inverting it, or forming a dense $P_0^{1/2}$ is out of the
+question.  We therefore search a block-Krylov space built from operator
+applications alone.
 
-For approximate Ritz vectors, positivity is preserved by accepting only
-positive Ritz values; the residual test controls approximation quality but
-does not prove that every accepted correction improves convergence.
-Construction uses at most $2\ell_s$ applications of $P_0$ and
-$2\ell_s-b$ applications of~$\Fschur$, plus dense linear algebra of
-dimension at most~$\ell_s$.  One subsequent application of~$P_q$
-costs one application of $P_0$ and two products with a
-$\Lambda\times q$ matrix.  The final method uses
+The key observation is that $A=P_0\Fschur$ is self-adjoint in the $P_0^{-1}$
+inner product, and that a pair $(W_j,Z_j)$ with $Z_j=P_0W_j$ generates the next
+pair using only forward applications,
 \begin{equation}
-    q=\min\{224,\lfloor\Lambda/2\rfloor,\lceil0.30\Lambda\rceil+2\},\qquad
-    \ell_s=\min\{\lfloor\Lambda/2\rfloor,q+192\},\qquad m=10.
-    \label{eq:journal-correction-parameters}
+    \widetilde W_{j+1}=\Fschur Z_j,\qquad
+    \widetilde Z_{j+1}=P_0\widetilde W_{j+1}.
+    \label{eq:journal-block-krylov}
 \end{equation}
-Here $m+1=11$ is the Krylov depth.  The minimum block width four allows a
-symmetric interface to represent repeated extreme eigenvalues.  When
-$\Lambda\le16$, we replace the unreliable random sketch by a deterministic
-setup-time Ritz analysis of the materialized interface operators.  The same
-rank formula is retained, so at least half the interface space remains
-uncorrected.  This branch computes no inverse of~$\Fschur$ and its largest
-eigenproblem has order 16.
+Starting from a random $W_0\in\R^{\Lambda\times b}$, each new pair is
+orthogonalized twice against the retained ones and normalized so that
+$Z_i^\top W_j=\delta_{ij}I$; the required inner products come from small cross-Gram
+matrices, so neither $P_0^{-1}$ nor $P_0^{1/2}$ is ever applied.  We accumulate
+pairs until $Z$ and $W$ have $\ell_s$ columns, which yields $Z^\top W=I$ with
+$Z$ spanning a block-Krylov space for $A$~\cite{saad2003iterative}.  Retaining
+every power, rather than only the last power-iteration block, lets
+Rayleigh--Ritz reach both ends of the spectrum, which matters here because
+extreme eigenvalues are offending in either direction.  The candidates then
+come from a symmetric eigenproblem of order at most $\ell_s$,
+\begin{equation}
+    (Z^\top\Fschur Z)\vect c_i=\lambda_i\vect c_i,
+    \qquad \vect y_i=Z\vect c_i,
+    \qquad \vect w_i=W\vect c_i .
+    \label{eq:journal-ritz}
+\end{equation}
+This is where the normalization hypothesis of
+Proposition~\ref{prop:journal-spd} is met: $Z^\top W=Z^\top P_0^{-1}Z=I$ and
+the $\vect c_i$ are Euclidean-orthonormal, so $Y^\top P_0^{-1}Y=I$ by
+construction.
 
-These parameters were selected on the reported development suite and then
-frozen before the final 30- and 50-repeat runs; the same rule is used at every
-degree, refinement, patch count, and geometry in those runs.  The suite must
-therefore be interpreted as a fixed benchmark suite, not as a statistically
-held-out hyperparameter test.
-This construction is not an implicit exact inverse: it corrects at most 224
-directions and never more than half the interface, leaving the complementary
-space under~$P_0$.  For $\Lambda>16$, it uses only operator products.
-Its setup cost is nevertheless nonzero.  The
-reported timing claim therefore concerns repeated solves after setup, not
-single-right-hand-side time to solution; this distinction is maintained in
-every table and figure.
+% \paragraph{Deciding which candidates to keep.}
+% Ritz vectors are approximate, and this matters more than it usually does:
+% \eqref{eq:journal-correction} multiplies a direction by $\lambda_i^{-1}$, so
+% correcting a direction that is not close to an eigenvector can make
+% convergence worse rather than better.  Each candidate is therefore tested
+% before it is used.  We discard numerically nonpositive modes, namely those
+% with $\lambda_i$ below $\max\{10^{-8},10^{-4}\max_j|\lambda_j|\}$, and
+% then any candidate whose relative residual exceeds a tolerance
+% $\eta_{\max}$,
+% \begin{equation}
+%     \eta_i=\frac{\bigl(\vect r_i^\top P_0\vect r_i\bigr)^{1/2}}{|\lambda_i|},
+%     \qquad \vect r_i=\Fschur\vect y_i-\lambda_i\vect w_i .
+%     \label{eq:journal-ritz-residual}
+% \end{equation}
+% The numerator is the residual norm of the $P_0^{-1}$-self-adjoint
+% eigenproblem and costs one extra application of $P_0$.  Of the survivors we
+% keep the $q$ with largest $|\log\lambda_i|$, that is, the ones furthest from
+% one in the multiplicative sense.  This test is what makes the construction
+% adaptive: the correction rank is a budget, not a promise, and a run may
+% legitimately accept fewer modes than requested, or none at all.  The accepted
+% count is therefore recorded per row in the released CSV, and is stated in the
+% caption of every table whose reading depends on it; the Yeti reference case in
+% Section~\ref{sec:yeti-results} is one where it does.
+
+% \paragraph{Parameters.}
+% Six quantities are fixed for every run.  Their values are collected in
+% \eqref{eq:journal-correction-parameters} and their roles in the table below:
+% \begin{equation}
+%     q=\min\bigl\{\lceil0.30\Lambda\rceil+2,\;224,\;\lfloor\Lambda/2\rfloor\bigr\},
+%     \qquad
+%     \ell_s=\min\bigl\{\lfloor\Lambda/2\rfloor,\;q+192\bigr\},
+%     \qquad
+%     m+1=11 ,
+%     \label{eq:journal-correction-parameters}
+% \end{equation}
+% with block width $b=\min\{\ell_s,\max(4,\lceil\ell_s/(m+1)\rceil)\}$, residual
+% tolerance $\eta_{\max}=0.2$, and a switch to the deterministic branch below
+% when $\Lambda\le16$.  On the two reference problems this gives
+% $(q,\ell_s)=(118,192)$ for the Yeti and $(79,128)$ for the teapot.
+
+% % Deliberately not a float: this is a glossary for
+% % \eqref{eq:journal-correction-parameters}, and numbering it would renumber
+% % every results table.
+% \begin{center}
+%     \small
+%     \begin{tabular}{llp{0.34\textwidth}p{0.27\textwidth}}
+%         \toprule
+%         Symbol                    & Value                                                               & Controls & Origin \\
+%         \midrule
+%         $q$                       & \eqref{eq:journal-correction-parameters}
+%                                   & how many directions may be corrected; the per-iteration cost grows
+%         like $\Lambda q$
+%                                   & the $0.30\Lambda$ fraction is the first tested fraction at which
+%         both reference iteration curves reach their plateau
+%         (Section~\ref{subsec:rank-sensitivity}); $+2$ guards endpoint
+%         rounding on small interfaces                                                                                        \\
+%         \addlinespace
+%         $224$                     & absolute cap on $q$
+%                                   & keeps the cost of one application bounded on large interfaces
+%                                   & development suite                                                                       \\
+%         \addlinespace
+%         $\lfloor\Lambda/2\rfloor$ & structural cap on $q$ and $\ell_s$
+%                                   & guarantees that at least half the interface space is never
+%         corrected
+%                                   & required by the method: without it the construction could
+%         degenerate towards an implicit exact inverse and the comparison
+%         would lose its meaning                                                                                              \\
+%         \addlinespace
+%         $\ell_s$                  & \eqref{eq:journal-correction-parameters}
+%                                   & size of the search space; the oversampling $\ell_s-q$ is what makes
+%         the random sketch reliable
+%                                   & oversampling $192$, development suite                                                   \\
+%         \addlinespace
+%         $m+1$                     & $11$
+%                                   & Krylov depth, i.e.\ how many powers of $A$ the space contains
+%                                   & development suite                                                                       \\
+%         \addlinespace
+%         $b$                       & $\max(4,\lceil\ell_s/(m+1)\rceil)$
+%                                   & block width; depth times width fills the search space
+%                                   & the minimum of four lets a symmetric interface represent repeated
+%         extreme eigenvalues                                                                                                 \\
+%         \addlinespace
+%         $\eta_{\max}$             & $0.2$
+%                                   & how good a Ritz pair must be before it is corrected
+%                                   & development suite                                                                       \\
+%         \addlinespace
+%         $\Lambda\le16$            & dense branch
+%                                   & below this size the random sketch is unreliable, so a deterministic
+%         setup-time Ritz analysis of the materialized operators is used
+%         instead, with the same rank rule
+%                                   & development suite                                                                       \\
+%         \bottomrule
+%     \end{tabular}
+% \end{center}
+
+% Only the two structural caps are forced by the method.  The remaining values
+% were chosen on the development suite and then frozen before the final 30- and
+% 50-repeat runs, so that suite must be read as a fixed benchmark rather than as
+% a held-out hyperparameter test.
+
+% \paragraph{Cost and scope.}
+% Construction uses at most $2\ell_s$ applications of $P_0$ and $2\ell_s-b$
+% applications of $\Fschur$, plus dense linear algebra of order at most
+% $\ell_s$.  One subsequent application of $P_q$ costs one application of $P_0$
+% and two products with a $\Lambda\times q$ matrix.  Two consequences are worth
+% stating plainly.  First, this is not an implicit exact inverse: it corrects at
+% most 224 directions and never more than half the interface, and it computes no
+% inverse of $\Fschur$.  Second, its setup cost is real, so the timing claims of
+% this paper concern repeated solves after setup rather than
+% single-right-hand-side time to solution; that distinction is maintained in
+% every table and figure.
 
 \subsection{Projection as a no-retraining alternative}
 \label{subsec:projection}
@@ -1009,22 +1100,66 @@ transfer reliably to child patches.
     \label{fig:journal-geometries}
 \end{figure}
 
-\begin{table}[t]
+\begin{table}[p]
     \centering
-    \caption{Yeti reference problem at $(p,r)=(2,2)$.  Times exclude setup.
-        A dash denotes the non-iterative direct solver.}
+    \small
+    \caption{Yeti reference problem at $(p,r)=(2,2)$, with the technique
+        ablation.  $T_{\rm solve}$ excludes setup; $T_{\rm setup}$ covers
+        everything before the first iteration, the parenthesised value
+        removing the one-off ONNX model load.  A dash denotes the
+        non-iterative direct solver.  Techniques are stated relative to the
+        originally reported recipe: $L$ replaces the sampled-action $\ell_2$
+        loss by the operator-level loss of
+        Section~\ref{subsec:native-data}; $D$ replaces the original
+        Gaussian-random-field probes by the canonical basis sweep; $C$ is the
+        setup-time rank-four local calibration; $G$ is the adaptive interface
+        correction.  The four $(L,D)$ cells share one network, optimizer,
+        schedule, split rule and seed, so that $L$ and $D$ are isolated, and
+        each uses the published operator-loss weights for its problem; the
+        original block keeps the smaller network, so the gap between it and
+        the matched $L\circ D\circ C\circ G\circ$ row measures the network
+        and schedule change alone.  Every row is one thread, 30 measured
+        solves, tolerance $10^{-8}$, and comes from a single campaign.
+        $^{\dagger}$On the Yeti the matrix-free search certifies none of the
+        118 requested Ritz modes for scaled Dirichlet, because the exact
+        $\mathcal{P}_0$ is singular there;
+        that row therefore coincides with unmodified IETI-DP, while all 118
+        are certified for every neural row.}
     \label{tab:journal-yeti-reference}
-    \input{journal_results_dominance/tables/yeti_reference_table.tex}
+    \input{journal_results_dominance/tables/yeti_reference_ablation.tex}
 \end{table}
 
 Table~\ref{tab:journal-yeti-reference} provides the reference comparison.
 Here $N=5760$, $\Lambda=384$, and
 \eqref{eq:journal-correction-parameters} gives $q=118$.  Relative to
-classical IETI-DP, the neural method reduces the count from 14 to 9 and the
-solve time from $6.519$ to $4.467$ ms, reductions of $35.7\%$ and $31.5\%$,
-respectively.  Direct Cholesky is faster after its factorization has been
-excluded, so this is a speedup over the iterative IETI-DP baseline, not over
-every method in the table.
+classical IETI-DP, the best neural configuration reduces the count from 14 to
+5 and the solve time from $6.733$ to $2.672$ ms, reductions of $64.3\%$ and
+$60.3\%$, respectively.  Direct Cholesky is faster after its factorization has
+been excluded, so this is a speedup over the iterative IETI-DP baseline, not
+over every method in the table.
+
+The lower two blocks isolate which of the four techniques produces that
+reduction.  The originally reported checkpoint needs 17 iterations; retraining
+the same loss on the same data with the current network reaches 14, so the
+network and schedule alone account for that first step.  Neither model-side
+technique helps on this geometry.  The operator-level loss costs an iteration
+($14\to15$) even with the published Yeti weights $(0.5,0.1)$, and the
+canonical sweep costs six ($14\to20$) because it supplies ten times fewer
+action rows than the Gaussian-random-field probes it replaces; the two
+datasets otherwise carry identical information, reconstructing the same 21
+patch operators to a relative $2\cdot10^{-8}$, so on the Yeti the data recipe
+is a sampling choice rather than a modelling one.
+
+What produces the reduction is the interface correction, and only in
+combination.  On the already accurate baseline its target modes all have
+generalized eigenvalues near $1.2$ and it buys nothing ($14\to15$); on the
+weaker sweep-trained network it removes genuinely extremal modes and reaches
+five iterations.  The effects are therefore strongly non-additive: enabling
+all four techniques gives 17 iterations, worse than enabling none, and the
+operator-level loss appears in no winning combination.  The corresponding
+deployed configuration in Appendix~\ref{app:scalability} uses that loss and
+needs nine iterations, so the ablation identifies a simpler and faster
+configuration than the one currently deployed.
 The full refinement, degree, and patch-count studies are moved to
 Appendix~\ref{app:scalability}.  Every reported Yeti point has both fewer
 iterations and lower solve-only mean time than unmodified IETI-DP.
@@ -1055,7 +1190,7 @@ IETI-DP.  Its solve-only speedups are $1.65\times$, $1.74\times$, and
 $1.52\times$.  The third row of each block applies the identical correction to
 the classical base and leaves its count unchanged.  That row must not be read
 as evidence that the correction is ineffective on the classical
-preconditioner: as Section~\ref{subsec:ablation-attribution} shows, the
+preconditioner: as Section~\ref{subsec:attribution-control} shows, the
 matrix-free search accepts no Ritz mode at all on the Yeti, because the exact
 scaled-Dirichlet $P_0$ is singular there.  Constructing the same correction
 deterministically instead brings the classical base to $3$ iterations at all
@@ -1076,310 +1211,339 @@ subdivision model, the $(2,1)$, $(2,3)$ and $(1,2)$ rows use the corresponding
 balanced models.  It tests solver behavior across discretizations and patch counts, not
 whole-family zero-shot transfer.
 
-\begin{table}[t]
-    \centering
-    \caption{Teapot reference problem at $(p,r)=(2,2)$.  Times exclude setup.
-        A dash denotes the non-iterative direct solver.}
-    \label{tab:journal-teapot-reference}
-    \input{journal_results_dominance/tables/teapot_reference_table.tex}
-\end{table}
-
-At the reference point $N=750$, $\Lambda=256$, and $q=79$.
-Table~\ref{tab:journal-teapot-reference} shows a reduction from 19 to 8
-iterations and from $1.415$ to $0.700$ ms relative to classical IETI-DP,
-namely $57.9\%$ and $50.5\%$.  The degree, refinement, and patch-count studies
-in Appendix~\ref{app:scalability} use the same formula
-\eqref{eq:journal-correction-parameters}.  Unlike the earlier local-only
-models, the calibrated and residual-certified method remains below
-unmodified IETI-DP at all reported teapot points.
-
-\FloatBarrier
-
-\subsection{What transfers across geometry?}
-\label{subsec:geometry-generalization}
-
-The principal teapot model above is in distribution, so it cannot establish
-transfer to a new CAD family.  We therefore perform a stricter experiment:
-the surface-diverse model of Section~\ref{subsec:native-data} is trained on
-214 non-teapot patch operators, and the complete teapot family is first seen
-at solver setup.  The other geometries in
-Table~\ref{tab:journal-geometry-generalization} are included in that model's
-training set and check that the same frozen method remains effective on its
-declared distribution.  Thus only the teapot row is a whole-family neural
-holdout.
-
-Every neural row uses the complete method, including local rank-four
-calibration and the interface correction
-\eqref{eq:journal-correction-parameters}.  The latter is constructed from
-applications of the test operator during setup.  Consequently, ``held out''
-refers to the offline neural model, not to an operator-oblivious
-preconditioner.  To expose how much of the gain can come from this online
-adaptation, we also apply the identical correction to the classical
-scaled-Dirichlet base.
-
-\begin{table}[t]
-    \centering
-    \caption{Geometry recovery at $(p,r)=(2,2)$.  Each entry reports mean
-        solve-only time and PCG iterations over 50 solves; setup is excluded.
-        ``Held out'' means that the complete geometry family is absent from
-        offline neural training.}
-    \label{tab:journal-geometry-generalization}
-    \input{journal_results/tables/geometry_generalization_table.tex}
-\end{table}
-
-The neural method is faster and uses fewer iterations than unmodified
-IETI-DP on all six geometries.  Most importantly, on the unseen teapot it
-reduces the count from 19 to 12 and the solve time from $1.392$ to
-$0.979$ ms, a $1.42\times$ speedup.  On the five in-distribution geometries,
-the solve-time speedup ranges from $1.23\times$ on the square to
-$2.40\times$ on the 12-patch L-domain.  Figure~\ref{fig:journal-geometry-recovery}
-shows the same data as ratios to unmodified IETI-DP.
-
-This result supports whole-family transfer of the \emph{offline local model}
-to the tested teapot, not distribution-free geometric generalization.  The
-same-correction control is decisive for interpreting it: on the teapot, the
-corrected classical base needs 6 iterations and $0.518$ ms, so the online
-interface enrichment is stronger than the transferred neural base in that
-case.  On the lake and the two L-domains the neural and corrected-classical
-results are essentially tied.  The supported comparison is therefore with
-unmodified IETI-DP; learning is not claimed to beat the strongest
-identically enriched classical alternative.
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=0.94\textwidth]
-    {journal_results/figures/geometry_recovery_ratios.pdf}
-    \caption{Geometry-recovery ratios relative to unmodified IETI-DP; values
-        below one are better.  The teapot is absent from offline neural training.
-        Both enriched methods use the same test-operator-dependent interface
-        correction during setup, which is excluded from the plotted solve time.}
-    \label{fig:journal-geometry-recovery}
-\end{figure}
-
-\FloatBarrier
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.92\textwidth]
-    {journal_results_dominance/figures/reference_convergence.pdf}
-    \caption{Relative PCG residuals on the $(p,r)=(2,2)$ Yeti and teapot.
-        Neural IETI-DP includes local rank-four calibration and the
-        residual-certified correction~\eqref{eq:journal-correction-parameters};
-        IETI-DP is the unmodified scaled-Dirichlet method.  Setup is excluded.}
-    \label{fig:journal-reference-convergence}
-\end{figure}
-
-Figure~\ref{fig:journal-reference-convergence} shows that the gain is not a
-different stopping convention: all curves start from the same iterate and are
-normalized by their own initial residual.  The neural residual reaches
-$10^{-8}$ after 9 rather than 14 steps on the Yeti and after 8 rather than 19
-steps on the teapot.
-
-\FloatBarrier
-
-\subsection{Correction-rank sensitivity}
-\label{subsec:rank-sensitivity}
-
-Figure~\ref{fig:journal-rank-ablation} varies only the correction rank on the
-reference discretization.  Rank $q=0$ is the native neural preconditioner
-without an interface correction but retains the local calibration; the
-remaining points use the same block-Krylov depth ($m=10$) and the same
-residual test ($\eta_i\le0.2$) as the principal method.  Two development-stage
-settings differ from the frozen rule: the sketch dimension is
-$\ell_s=\min\{\Lambda,q+192\}$, without the $\lfloor\Lambda/2\rfloor$ cap, and the
-local calibration caps the per-patch rank at
-$\min\{4,\lceil0.125\,n_k^+\rceil,n_k^+\}$ instead of $\min\{4,n_k^+\}$.  The cap
-is inactive on the 21 Yeti patches, which all keep four calibrated modes, but on
-the smaller teapot skeletons it reduces the per-patch rank to two or three;
-the frozen method of Section~\ref{subsec:local-model} calibrates four modes on
-every patch of both reference problems.
-Increasing $q$ can reduce iterations
-but also adds two $\Lambda\times q$ products to every preconditioner
-application.
-
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.92\textwidth]
-    {journal_results_dominance/figures/rank_ablation.pdf}
-    \caption{Development-stage neural correction-rank sensitivity at
-        $(p,r)=(2,2)$.
-        Both panels exclude setup; $q=0$ retains local calibration but omits the
-        global correction.  Means use 20 serial solves.}
-    \label{fig:journal-rank-ablation}
-\end{figure}
-
-\FloatBarrier
-
-On the Yeti, ranks $0,39,77,116,154$ give iteration counts
-$18,11,10,9,9$; solve time reaches its minimum at the tested
-$q=116$.  On the teapot, ranks $0,26,52,77,103$ give
-$24,13,10,8,8$ iterations, with the lower solve time again at the tested
-$q=77$.  The $0.30\Lambda$ fraction is therefore the first tested fraction at
-which both reference curves reach their iteration plateau; increasing the
-rank further adds work without improving the count.  The final rule
-\eqref{eq:journal-correction-parameters} adds a two-mode guard for endpoint
-rounding, giving $q=118$ and $q=79$ on the two reference problems.
-
-\subsection{Attribution against the same classical correction}
-\label{subsec:attribution-control}
-
-The main baseline is unmodified scaled-Dirichlet IETI-DP, as requested in the
-solver comparison.  A stronger attribution question is whether the neural
-local model remains preferable when the same block-Krylov construction is
-applied to the classical base.  Table~\ref{tab:journal-attribution} reports
-that control for every distinct configuration.
-
 \begin{table}[p]
     \centering
     \small
-    \caption{Attribution control over the complete fixed suite.  Solver cells
-        report $T_{\rm solve}$ in ms / PCG iterations; setup is excluded and every
-        time is a mean over 30 serial solves.  ``Same correction'' applies
-        \eqref{eq:journal-correction-parameters} to classical scaled-Dirichlet
-        IETI-DP.}
-    \label{tab:journal-attribution}
-    \input{journal_results_dominance/tables/dominance_table.tex}
+    \caption{Teapot reference problem at $(p,r)=(2,2)$, with the technique
+        ablation.  Columns, techniques and protocol are those of
+        Table~\ref{tab:journal-yeti-reference}; here $D$ replaces the
+        Yeti-only original data by the geometry-diverse and subdivision
+        families, so the two tables share their $L0D0$ network and differ in
+        the $D1$ ones.  Unlike the Yeti case, all 79 requested Ritz modes are
+        certified for every row, scaled Dirichlet included, so the classical
+        corrected row is a genuine competitor here.}
+    \label{tab:journal-teapot-reference}
+    \input{journal_results_dominance/tables/teapot_reference_ablation.tex}
 \end{table}
 
-The control is deliberately not uniformly favorable.  On most native Yeti
-cases it leaves the classical count unchanged or increases it, while the
-neural method remains faster.  On most teapot cases and on the largest
-subdivisions, the corrected classical base is as good as or better than the
-neural method.  Therefore the supported claim is strict improvement over
-\emph{unmodified} IETI-DP throughout this fixed suite.  The data do not support
-a claim that learning dominates the strongest identically enriched classical
-alternative.
+At the reference point $N=750$, $\Lambda=256$, and $q=79$.
+Table~\ref{tab:journal-teapot-reference} shows a reduction from 19 to 7
+iterations and from $1.425$ to $0.595$ ms relative to classical IETI-DP,
+namely $63.2\%$ and $58.2\%$.  The degree, refinement, and patch-count studies
+in Appendix~\ref{app:scalability} use the same formula
+\eqref{eq:journal-correction-parameters}.  Unlike the earlier local-only
+models, the calibrated and residual-certified method remains below unmodified
+IETI-DP at all reported teapot points.
 
-\section{Conclusions}
-\label{sec:conclusions}
+The ablation reads very differently from the Yeti one.  The originally
+reported checkpoint needs 102 iterations because it saw Yeti patches only, and
+the matched network trained on that same data is worse still at 162: fitting
+the Yeti patches more accurately does not transfer.  Here the data recipe is
+the decisive technique, taking the same network and the same loss from 162 to
+20 iterations, within one step of scaled Dirichlet.  The local calibration
+helps in proportion to how poor the local operator is, from 162 to 77 without
+the new data and not at all with it, and the interface correction again gives
+the largest single reduction, from 20 to 7.  The operator-level loss again
+fails to earn its place, helping only where the network is out of distribution
+($162\to138$) and costing iterations where it is not ($20\to24$).
 
-A geometry-conditioned SPD model alone is not sufficiently robust across this
-suite.  The effective method is hybrid: the network supplies the bulk local
-operator, at most four exact generalized eigenmodes calibrate each patch, and a
-residual-certified block-Krylov space corrects a capped set of assembled
-interface modes.  Expensive inference and adaptation are performed once and
-the resulting linear operator is cached.  With one formula fixed across all
-cases, the hybrid method has fewer iterations and lower solve-only mean time
-than unmodified scaled-Dirichlet IETI-DP in all 16 distinct Yeti/teapot
-configurations.  The observed speedup range is $1.13\times$--$2.68\times$.
-
-These results are not evidence for a learned inverse.  No inverse of
-$\Fschur$ is computed, but the setup does use exact local Schur matrices and
-many matrix-free applications of $\Fschur$ and $P_0$.  The corresponding cost
-is excluded from $T_{\rm solve}$, so the result applies to repeated solves
-after reusable setup, not to one-right-hand-side end-to-end time.  Moreover,
-the identically corrected classical control is better on most teapot cases.
-The subdivision results are also enabled by subdivision examples in training;
-they are not zero-shot generalization.
-
-The evidence is limited to the constant-coefficient Poisson problem, two
-principal geometries, the discretizations in~\eqref{eq:journal-pr-grid}, and
-serial CPU solves.  Appropriate next tests are coefficient contrast,
-distributed-memory patch solves, larger whole-family CAD holdouts, explicit
-setup-amortization curves, and comparison with established adaptive
-BDDC/FETI-DP coarse-space constructions.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Appendix
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\appendix
-\section{Scalability results}
-\label{app:scalability}
-
-This appendix varies one parameter at a time.  Refinement uses
-$p=2$ and $r\in\{1,2,3\}$; degree uses $r=2$ and
-$p\in\{1,2,3,4\}$; patch scaling fixes $(p,r)=(2,2)$.  Every point reports
-both solve-only time and iterations for the requested methods.  Direct
-Cholesky appears only in the timing panel because it has no iteration count.
-In the patch-count sweeps, the Yeti model
-at $K=21$ is the fixed-patch specialist, while the subdivided Yeti points and
-all three teapot points -- including the unsubdivided $K=32$ reference -- use
-the declared 1163-operator subdivision model.  The patch-count
-sweeps therefore test solver scaling inside that augmented training
-distribution; they do not test zero-shot transfer to child patches.
-
-\subsection{Yeti}
-
-Across $r=1,2,3$ at $p=2$, neural IETI-DP uses 8, 9, and 9 iterations,
-compared with 12, 14, and 16 for classical IETI-DP.  At $r=2$ and
-$p=1,2,3,4$, the corresponding counts are 10, 9, 8, and 10 versus 13, 14,
-15, and 16.  At $K=21,84,336$, the neural counts are 9, 12, and 15 versus
-14, 19, and 21; see Figures~\ref{fig:journal-yeti-refinement},
-\ref{fig:journal-yeti-degree} and~\ref{fig:journal-yeti-patches}.
-The narrowest Yeti time margin occurs at $(p,r)=(1,2)$:
-$2.521$ ms versus $3.079$ ms, a $1.22\times$ speedup; the largest patch count
-$K=336$ is next, at $54.177$ ms versus $69.192$ ms, a $1.28\times$ speedup.
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/yeti_refinement_scalability.pdf}
-    \caption{Yeti refinement study at $p=2$, $K=21$: solve-only time and
-        iterations for all five methods.  Neural IETI-DP uses
-        \eqref{eq:journal-correction-parameters}; setup is excluded.}
-    \label{fig:journal-yeti-refinement}
-\end{figure}
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/yeti_degree_scalability.pdf}
-    \caption{Yeti degree study at $r=2$, $K=21$: solve-only time and
-        iterations for all five methods; setup is excluded.}
-    \label{fig:journal-yeti-degree}
-\end{figure}
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/yeti_patches_scalability.pdf}
-    \caption{Yeti patch-count study at $(p,r)=(2,2)$: solve-only time and
-        iterations for all five methods.  The $K=84,336$ neural points use the
-        subdivision-augmented model; setup is excluded.}
-    \label{fig:journal-yeti-patches}
-\end{figure}
-
-\subsection{Teapot}
-
-At $p=2$, the neural counts for $r=1,2,3$ are 10, 8, and 7, versus 15, 19,
-and 22 for classical IETI-DP.  At $r=2$, the neural degree counts for
-$p=1,2,3,4$ are 7, 8, 17, and 17 versus 16, 19, 21, and 23.  The smallest
-time margin is the high-degree case $p=3$: $1.955$ ms versus $2.216$ ms,
-or $1.13\times$.  At $K=32,128,512$, the neural counts are 8, 10, and 22
-versus 19, 24, and 36, with solve-only speedups $2.02\times$,
-$2.16\times$, and $1.54\times$, respectively; see
-Figures~\ref{fig:journal-teapot-refinement},
-\ref{fig:journal-teapot-degree} and~\ref{fig:journal-teapot-patches}.
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/teapot_refinement_scalability.pdf}
-    \caption{Teapot refinement study at $p=2$, $K=32$: solve-only time and
-        iterations for all five methods; setup is excluded.}
-    \label{fig:journal-teapot-refinement}
-\end{figure}
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/teapot_degree_scalability.pdf}
-    \caption{Teapot degree study at $r=2$, $K=32$: solve-only time and
-        iterations for all five methods; setup is excluded.}
-    \label{fig:journal-teapot-degree}
-\end{figure}
-
-\begin{figure}[p]
-    \centering
-    \includegraphics[width=\textwidth]
-    {journal_results_dominance/figures/teapot_patches_scalability.pdf}
-    \caption{Teapot patch-count study at $(p,r)=(2,2)$: solve-only time and
-        iterations for all five methods.  The neural model includes subdivided
-        teapot patches in training; setup is excluded.}
-    \label{fig:journal-teapot-patches}
-\end{figure}
+One row deserves emphasis.  Scaled Dirichlet carrying the same interface
+correction converges in six iterations at $0.529$ ms, fewer iterations and
+less solve time than any neural configuration in the table, at roughly a third
+of the setup cost.  The certification accepts all 79 modes for it here, so
+unlike the Yeti case this is a genuine comparison, and on this surface the
+neural local operator does not yet improve on a well-corrected classical
+preconditioner.  The gain it does deliver over uncorrected IETI-DP comes
+almost entirely from the training distribution rather than from the training
+objective.
 
 \FloatBarrier
+
+% \subsection{What transfers across geometry?}
+% \label{subsec:geometry-generalization}
+
+% The principal teapot model above is in distribution, so it cannot establish
+% transfer to a new CAD family.  We therefore perform a stricter experiment:
+% the surface-diverse model of Section~\ref{subsec:native-data} is trained on
+% 214 non-teapot patch operators, and the complete teapot family is first seen
+% at solver setup.  The other geometries in
+% Table~\ref{tab:journal-geometry-generalization} are included in that model's
+% training set and check that the same frozen method remains effective on its
+% declared distribution.  Thus only the teapot row is a whole-family neural
+% holdout.
+
+% Every neural row uses the complete method, including local rank-four
+% calibration and the interface correction
+% \eqref{eq:journal-correction-parameters}.  The latter is constructed from
+% applications of the test operator during setup.  Consequently, ``held out''
+% refers to the offline neural model, not to an operator-oblivious
+% preconditioner.  To expose how much of the gain can come from this online
+% adaptation, we also apply the identical correction to the classical
+% scaled-Dirichlet base.
+
+% \begin{table}[t]
+%     \centering
+%     \caption{Geometry recovery at $(p,r)=(2,2)$.  Each entry reports mean
+%         solve-only time and PCG iterations over 50 solves; setup is excluded.
+%         ``Held out'' means that the complete geometry family is absent from
+%         offline neural training.}
+%     \label{tab:journal-geometry-generalization}
+%     \input{journal_results/tables/geometry_generalization_table.tex}
+% \end{table}
+
+% The neural method is faster and uses fewer iterations than unmodified
+% IETI-DP on all six geometries.  Most importantly, on the unseen teapot it
+% reduces the count from 19 to 12 and the solve time from $1.392$ to
+% $0.979$ ms, a $1.42\times$ speedup.  On the five in-distribution geometries,
+% the solve-time speedup ranges from $1.23\times$ on the square to
+% $2.40\times$ on the 12-patch L-domain.  Figure~\ref{fig:journal-geometry-recovery}
+% shows the same data as ratios to unmodified IETI-DP.
+
+% This result supports whole-family transfer of the \emph{offline local model}
+% to the tested teapot, not distribution-free geometric generalization.  The
+% same-correction control is decisive for interpreting it: on the teapot, the
+% corrected classical base needs 6 iterations and $0.518$ ms, so the online
+% interface enrichment is stronger than the transferred neural base in that
+% case.  On the lake and the two L-domains the neural and corrected-classical
+% results are essentially tied.  The supported comparison is therefore with
+% unmodified IETI-DP; learning is not claimed to beat the strongest
+% identically enriched classical alternative.
+
+% \begin{figure}[t]
+%     \centering
+%     \includegraphics[width=0.94\textwidth]
+%     {journal_results/figures/geometry_recovery_ratios.pdf}
+%     \caption{Geometry-recovery ratios relative to unmodified IETI-DP; values
+%         below one are better.  The teapot is absent from offline neural training.
+%         Both enriched methods use the same test-operator-dependent interface
+%         correction during setup, which is excluded from the plotted solve time.}
+%     \label{fig:journal-geometry-recovery}
+% \end{figure}
+
+% \FloatBarrier
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=0.92\textwidth]
+%     {journal_results_dominance/figures/reference_convergence.pdf}
+%     \caption{Relative PCG residuals on the $(p,r)=(2,2)$ Yeti and teapot.
+%         Neural IETI-DP includes local rank-four calibration and the
+%         residual-certified correction~\eqref{eq:journal-correction-parameters};
+%         IETI-DP is the unmodified scaled-Dirichlet method.  Setup is excluded.}
+%     \label{fig:journal-reference-convergence}
+% \end{figure}
+
+% Figure~\ref{fig:journal-reference-convergence} shows that the gain is not a
+% different stopping convention: all curves start from the same iterate and are
+% normalized by their own initial residual.  The neural residual reaches
+% $10^{-8}$ after 9 rather than 14 steps on the Yeti and after 8 rather than 19
+% steps on the teapot.
+
+% \FloatBarrier
+
+% \subsection{Correction-rank sensitivity}
+% \label{subsec:rank-sensitivity}
+
+% Figure~\ref{fig:journal-rank-ablation} varies only the correction rank on the
+% reference discretization.  Rank $q=0$ is the native neural preconditioner
+% without an interface correction but retains the local calibration; the
+% remaining points use the same block-Krylov depth ($m=10$) and the same
+% residual test ($\eta_i\le0.2$) as the principal method.  Two development-stage
+% settings differ from the frozen rule: the sketch dimension is
+% $\ell_s=\min\{\Lambda,q+192\}$, without the $\lfloor\Lambda/2\rfloor$ cap, and the
+% local calibration caps the per-patch rank at
+% $\min\{4,\lceil0.125\,n_k^+\rceil,n_k^+\}$ instead of $\min\{4,n_k^+\}$.  The cap
+% is inactive on the 21 Yeti patches, which all keep four calibrated modes, but on
+% the smaller teapot skeletons it reduces the per-patch rank to two or three;
+% the frozen method of Section~\ref{subsec:local-model} calibrates four modes on
+% every patch of both reference problems.
+% Increasing $q$ can reduce iterations
+% but also adds two $\Lambda\times q$ products to every preconditioner
+% application.
+
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=0.92\textwidth]
+%     {journal_results_dominance/figures/rank_ablation.pdf}
+%     \caption{Development-stage neural correction-rank sensitivity at
+%         $(p,r)=(2,2)$.
+%         Both panels exclude setup; $q=0$ retains local calibration but omits the
+%         global correction.  Means use 20 serial solves.}
+%     \label{fig:journal-rank-ablation}
+% \end{figure}
+
+% \FloatBarrier
+
+% On the Yeti, ranks $0,39,77,116,154$ give iteration counts
+% $18,11,10,9,9$; solve time reaches its minimum at the tested
+% $q=116$.  On the teapot, ranks $0,26,52,77,103$ give
+% $24,13,10,8,8$ iterations, with the lower solve time again at the tested
+% $q=77$.  The $0.30\Lambda$ fraction is therefore the first tested fraction at
+% which both reference curves reach their iteration plateau; increasing the
+% rank further adds work without improving the count.  The final rule
+% \eqref{eq:journal-correction-parameters} adds a two-mode guard for endpoint
+% rounding, giving $q=118$ and $q=79$ on the two reference problems.
+
+% \subsection{Attribution against the same classical correction}
+% \label{subsec:attribution-control}
+
+% The main baseline is unmodified scaled-Dirichlet IETI-DP, as requested in the
+% solver comparison.  A stronger attribution question is whether the neural
+% local model remains preferable when the same block-Krylov construction is
+% applied to the classical base.  Table~\ref{tab:journal-attribution} reports
+% that control for every distinct configuration.
+
+% \begin{table}[p]
+%     \centering
+%     \small
+%     \caption{Attribution control over the complete fixed suite.  Solver cells
+%         report $T_{\rm solve}$ in ms / PCG iterations; setup is excluded and every
+%         time is a mean over 30 serial solves.  ``Same correction'' applies
+%         \eqref{eq:journal-correction-parameters} to classical scaled-Dirichlet
+%         IETI-DP.}
+%     \label{tab:journal-attribution}
+%     \input{journal_results_dominance/tables/dominance_table.tex}
+% \end{table}
+
+% The control is deliberately not uniformly favorable.  On most native Yeti
+% cases it leaves the classical count unchanged or increases it, while the
+% neural method remains faster.  On most teapot cases and on the largest
+% subdivisions, the corrected classical base is as good as or better than the
+% neural method.  Therefore the supported claim is strict improvement over
+% \emph{unmodified} IETI-DP throughout this fixed suite.  The data do not support
+% a claim that learning dominates the strongest identically enriched classical
+% alternative.
+
+% \section{Conclusions}
+% \label{sec:conclusions}
+
+% A geometry-conditioned SPD model alone is not sufficiently robust across this
+% suite.  The effective method is hybrid: the network supplies the bulk local
+% operator, at most four exact generalized eigenmodes calibrate each patch, and a
+% residual-certified block-Krylov space corrects a capped set of assembled
+% interface modes.  Expensive inference and adaptation are performed once and
+% the resulting linear operator is cached.  With one formula fixed across all
+% cases, the hybrid method has fewer iterations and lower solve-only mean time
+% than unmodified scaled-Dirichlet IETI-DP in all 16 distinct Yeti/teapot
+% configurations.  The observed speedup range is $1.13\times$--$2.68\times$.
+
+% These results are not evidence for a learned inverse.  No inverse of
+% $\Fschur$ is computed, but the setup does use exact local Schur matrices and
+% many matrix-free applications of $\Fschur$ and $P_0$.  The corresponding cost
+% is excluded from $T_{\rm solve}$, so the result applies to repeated solves
+% after reusable setup, not to one-right-hand-side end-to-end time.  Moreover,
+% the identically corrected classical control is better on most teapot cases.
+% The subdivision results are also enabled by subdivision examples in training;
+% they are not zero-shot generalization.
+
+% The evidence is limited to the constant-coefficient Poisson problem, two
+% principal geometries, the discretizations in~\eqref{eq:journal-pr-grid}, and
+% serial CPU solves.  Appropriate next tests are coefficient contrast,
+% distributed-memory patch solves, larger whole-family CAD holdouts, explicit
+% setup-amortization curves, and comparison with established adaptive
+% BDDC/FETI-DP coarse-space constructions.
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %% Appendix
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \appendix
+% \section{Scalability results}
+% \label{app:scalability}
+
+% This appendix varies one parameter at a time.  Refinement uses
+% $p=2$ and $r\in\{1,2,3\}$; degree uses $r=2$ and
+% $p\in\{1,2,3,4\}$; patch scaling fixes $(p,r)=(2,2)$.  Every point reports
+% both solve-only time and iterations for the requested methods.  Direct
+% Cholesky appears only in the timing panel because it has no iteration count.
+% In the patch-count sweeps, the Yeti model
+% at $K=21$ is the fixed-patch specialist, while the subdivided Yeti points and
+% all three teapot points -- including the unsubdivided $K=32$ reference -- use
+% the declared 1163-operator subdivision model.  The patch-count
+% sweeps therefore test solver scaling inside that augmented training
+% distribution; they do not test zero-shot transfer to child patches.
+
+% \subsection{Yeti}
+
+% Across $r=1,2,3$ at $p=2$, neural IETI-DP uses 8, 9, and 9 iterations,
+% compared with 12, 14, and 16 for classical IETI-DP.  At $r=2$ and
+% $p=1,2,3,4$, the corresponding counts are 10, 9, 8, and 10 versus 13, 14,
+% 15, and 16.  At $K=21,84,336$, the neural counts are 9, 12, and 15 versus
+% 14, 19, and 21; see Figures~\ref{fig:journal-yeti-refinement},
+% \ref{fig:journal-yeti-degree} and~\ref{fig:journal-yeti-patches}.
+% The narrowest Yeti time margin occurs at $(p,r)=(1,2)$:
+% $2.521$ ms versus $3.079$ ms, a $1.22\times$ speedup; the largest patch count
+% $K=336$ is next, at $54.177$ ms versus $69.192$ ms, a $1.28\times$ speedup.
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/yeti_refinement_scalability.pdf}
+%     \caption{Yeti refinement study at $p=2$, $K=21$: solve-only time and
+%         iterations for all five methods.  Neural IETI-DP uses
+%         \eqref{eq:journal-correction-parameters}; setup is excluded.}
+%     \label{fig:journal-yeti-refinement}
+% \end{figure}
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/yeti_degree_scalability.pdf}
+%     \caption{Yeti degree study at $r=2$, $K=21$: solve-only time and
+%         iterations for all five methods; setup is excluded.}
+%     \label{fig:journal-yeti-degree}
+% \end{figure}
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/yeti_patches_scalability.pdf}
+%     \caption{Yeti patch-count study at $(p,r)=(2,2)$: solve-only time and
+%         iterations for all five methods.  The $K=84,336$ neural points use the
+%         subdivision-augmented model; setup is excluded.}
+%     \label{fig:journal-yeti-patches}
+% \end{figure}
+
+% \subsection{Teapot}
+
+% At $p=2$, the neural counts for $r=1,2,3$ are 10, 8, and 7, versus 15, 19,
+% and 22 for classical IETI-DP.  At $r=2$, the neural degree counts for
+% $p=1,2,3,4$ are 7, 8, 17, and 17 versus 16, 19, 21, and 23.  The smallest
+% time margin is the high-degree case $p=3$: $1.955$ ms versus $2.216$ ms,
+% or $1.13\times$.  At $K=32,128,512$, the neural counts are 8, 10, and 22
+% versus 19, 24, and 36, with solve-only speedups $2.02\times$,
+% $2.16\times$, and $1.54\times$, respectively; see
+% Figures~\ref{fig:journal-teapot-refinement},
+% \ref{fig:journal-teapot-degree} and~\ref{fig:journal-teapot-patches}.
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/teapot_refinement_scalability.pdf}
+%     \caption{Teapot refinement study at $p=2$, $K=32$: solve-only time and
+%         iterations for all five methods; setup is excluded.}
+%     \label{fig:journal-teapot-refinement}
+% \end{figure}
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/teapot_degree_scalability.pdf}
+%     \caption{Teapot degree study at $r=2$, $K=32$: solve-only time and
+%         iterations for all five methods; setup is excluded.}
+%     \label{fig:journal-teapot-degree}
+% \end{figure}
+
+% \begin{figure}[p]
+%     \centering
+%     \includegraphics[width=\textwidth]
+%     {journal_results_dominance/figures/teapot_patches_scalability.pdf}
+%     \caption{Teapot patch-count study at $(p,r)=(2,2)$: solve-only time and
+%         iterations for all five methods.  The neural model includes subdivided
+%         teapot patches in training; setup is excluded.}
+%     \label{fig:journal-teapot-patches}
+% \end{figure}
+
+% \FloatBarrier
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Bibliography (Harvard notation)
